@@ -8,14 +8,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
-use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
+use crossbeam_channel::{bounded, Receiver, Sender};
 use parking_lot::Mutex;
 use rec_core::audio::AudioFrame;
 use rec_core::avi_writer::{encode_frame_to_jpeg, AviWriter};
 use rec_core::config::AppConfig;
-use rec_core::frame::VideoFrame;
+use rec_core::frame::{Pts, VideoFrame};
 use crate::errors::{EngineError, ReplayError};
-use crate::replay_buffer::InstantReplayBuffer;
+use crate::replay_buffer::{EncodedReplayFrame, InstantReplayBuffer};
 use crate::traits::{AudioBackend, CaptureBackend, CaptureTarget};
 
 /// State of the recording pipeline.
@@ -64,6 +64,9 @@ struct EncodeJob {
 
 struct EncodedFrame {
     seq: u64,
+    pts: Pts,
+    width: u32,
+    height: u32,
     jpeg_bytes: Vec<u8>,
 }
 
@@ -198,15 +201,20 @@ impl RecordingPipeline {
             let _ = std::fs::create_dir_all(parent);
         }
 
-        let (v_tx, v_rx): (Sender<VideoFrame>, Receiver<VideoFrame>) = bounded(120);
-        let (a_tx, a_rx): (Sender<AudioFrame>, Receiver<AudioFrame>) = unbounded();
-
-        let (job_tx, job_rx) = unbounded::<EncodeJob>();
-        let (enc_tx, enc_rx) = unbounded::<EncodedFrame>();
+        // Clear any leftover frames from previous recording session
+        self.replay_buffer.clear();
 
         let num_workers = std::thread::available_parallelism()
             .map(|n| n.get().clamp(4, 8))
             .unwrap_or(4);
+        let max_in_flight = (num_workers * 2) as u64;
+
+        // Strictly bounded channels to guarantee deterministic RAM ceiling (<100 MB in-flight raw buffers)
+        let (v_tx, v_rx): (Sender<VideoFrame>, Receiver<VideoFrame>) = bounded(6);
+        let (a_tx, a_rx): (Sender<AudioFrame>, Receiver<AudioFrame>) = bounded(512);
+
+        let (job_tx, job_rx) = bounded::<EncodeJob>(num_workers * 2);
+        let (enc_tx, enc_rx) = bounded::<EncodedFrame>(num_workers * 4);
 
         let quality_crf = self.config.quality_crf;
         // Map CRF (0..51) to JPEG quality (35..80). Default CRF 23 -> quality 52.
@@ -220,9 +228,15 @@ impl RecordingPipeline {
                 .name(format!("rec-encoder-{}", i))
                 .spawn(move || {
                     while let Ok(job) = j_rx.recv() {
+                        let pts = job.frame.pts;
+                        let width = job.frame.descriptor.width;
+                        let height = job.frame.descriptor.height;
                         let jpeg_bytes = encode_frame_to_jpeg(&job.frame, jpeg_quality).unwrap_or_default();
                         let _ = e_tx.send(EncodedFrame {
                             seq: job.seq,
+                            pts,
+                            width,
+                            height,
                             jpeg_bytes,
                         });
                     }
@@ -255,12 +269,18 @@ impl RecordingPipeline {
                 let mut frames_written = 0u64;
                 let mut seq_dispatched = 0u64;
                 let mut seq_written = 0u64;
-                let mut pending_encoded = BTreeMap::<u64, Vec<u8>>::new();
+                let mut pending_encoded = BTreeMap::<u64, EncodedFrame>::new();
                 let mut pending_audio = Vec::<AudioFrame>::new();
 
                 while running_clone.load(Ordering::Relaxed) || !v_rx.is_empty() || seq_written < seq_dispatched {
-                    // 1. Ingest newly captured video frames and dispatch to parallel encoder pool
-                    while let Ok(frame) = v_rx.try_recv() {
+                    // 1. Ingest newly captured video frames only while encoder pool has available capacity.
+                    // This enforces strict backpressure so raw uncompressed frames never accumulate in RAM.
+                    while seq_dispatched.saturating_sub(seq_written) < max_in_flight {
+                        let frame = match v_rx.try_recv() {
+                            Ok(f) => f,
+                            Err(_) => break,
+                        };
+
                         if writer.is_none() {
                             if let Ok(mut w) = AviWriter::new(
                                 &out_path_clone,
@@ -286,10 +306,6 @@ impl RecordingPipeline {
                             }
                         }
 
-                        if replay_duration > 0 {
-                            replay_clone.push_video_frame(frame.clone());
-                        }
-
                         let seq = seq_dispatched;
                         seq_dispatched += 1;
                         let _ = job_tx.send(EncodeJob { seq, frame });
@@ -309,7 +325,7 @@ impl RecordingPipeline {
                                     &active_config_slot,
                                 );
                             }
-                        } else {
+                        } else if pending_audio.len() < 256 {
                             pending_audio.push(audio.clone());
                         }
 
@@ -328,13 +344,13 @@ impl RecordingPipeline {
 
                     // 3. Receive finished encoded frames from parallel workers
                     while let Ok(enc) = enc_rx.try_recv() {
-                        pending_encoded.insert(enc.seq, enc.jpeg_bytes);
+                        pending_encoded.insert(enc.seq, enc);
                     }
 
                     // 4. Write in-order sequential frames to disk with continuous CFR lockstep pacing
-                    while let Some(jpeg) = pending_encoded.remove(&seq_written) {
+                    while let Some(enc) = pending_encoded.remove(&seq_written) {
                         if let Some(ref mut w) = writer {
-                            if !jpeg.is_empty() {
+                            if !enc.jpeg_bytes.is_empty() {
                                 let target_frames = start_time.map_or(0, |t| (t.elapsed().as_secs_f64() * target_fps as f64).round() as u64);
 
                                 while frames_written + 1 < target_frames {
@@ -342,8 +358,18 @@ impl RecordingPipeline {
                                     frames_written += 1;
                                 }
 
-                                let _ = w.write_preencoded_frame(&jpeg);
+                                let _ = w.write_preencoded_frame(&enc.jpeg_bytes);
                                 frames_written += 1;
+
+                                // Store compressed JPEG (~100 KB instead of 8.3 MB raw RGBA) in Instant Replay buffer
+                                if replay_duration > 0 {
+                                    replay_clone.push_encoded_frame(EncodedReplayFrame {
+                                        pts: enc.pts,
+                                        width: enc.width,
+                                        height: enc.height,
+                                        jpeg_bytes: enc.jpeg_bytes,
+                                    });
+                                }
                             }
                         }
                         seq_written += 1;
@@ -375,17 +401,26 @@ impl RecordingPipeline {
                 // Drain any remaining in-flight jobs from parallel workers until seq_written == seq_dispatched
                 while seq_written < seq_dispatched {
                     if let Ok(enc) = enc_rx.recv() {
-                        pending_encoded.insert(enc.seq, enc.jpeg_bytes);
-                        while let Some(jpeg) = pending_encoded.remove(&seq_written) {
+                        pending_encoded.insert(enc.seq, enc);
+                        while let Some(enc) = pending_encoded.remove(&seq_written) {
                             if let Some(ref mut w) = writer {
-                                if !jpeg.is_empty() {
+                                if !enc.jpeg_bytes.is_empty() {
                                     let target_frames = start_time.map_or(0, |t| (t.elapsed().as_secs_f64() * target_fps as f64).round() as u64);
                                     while frames_written + 1 < target_frames {
                                         let _ = w.repeat_last_frame();
                                         frames_written += 1;
                                     }
-                                    let _ = w.write_preencoded_frame(&jpeg);
+                                    let _ = w.write_preencoded_frame(&enc.jpeg_bytes);
                                     frames_written += 1;
+
+                                    if replay_duration > 0 {
+                                        replay_clone.push_encoded_frame(EncodedReplayFrame {
+                                            pts: enc.pts,
+                                            width: enc.width,
+                                            height: enc.height,
+                                            jpeg_bytes: enc.jpeg_bytes,
+                                        });
+                                    }
                                 }
                             }
                             seq_written += 1;
@@ -569,6 +604,39 @@ impl RecordingPipeline {
     ///
     /// Returns [`EngineError::Replay`] if no frames are currently buffered.
     pub fn save_instant_replay<P: AsRef<Path>>(&self, dest_path: P) -> Result<PathBuf, EngineError> {
+        let encoded_frames = self.replay_buffer.export_encoded_snapshot();
+        if !encoded_frames.is_empty() {
+            if let Some(parent) = dest_path.as_ref().parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+
+            let first = &encoded_frames[0];
+            let mut writer = AviWriter::new(
+                dest_path.as_ref(),
+                first.width,
+                first.height,
+                self.config.fps,
+            )
+            .map_err(|e| EngineError::Replay(ReplayError::SaveFailed(e.to_string())))?;
+
+            for frame in &encoded_frames {
+                writer
+                    .write_preencoded_frame(&frame.jpeg_bytes)
+                    .map_err(|e| EngineError::Replay(ReplayError::SaveFailed(e.to_string())))?;
+            }
+
+            let audio_frames = self.replay_buffer.export_audio_snapshot();
+            for audio in &audio_frames {
+                let _ = writer.write_audio_frame(audio);
+            }
+
+            writer
+                .finalize()
+                .map_err(|e| EngineError::Replay(ReplayError::SaveFailed(e.to_string())))?;
+
+            return Ok(dest_path.as_ref().to_path_buf());
+        }
+
         let frames = self.replay_buffer.export_video_snapshot()?;
         if frames.is_empty() {
             return Err(EngineError::Replay(ReplayError::EmptyBuffer));

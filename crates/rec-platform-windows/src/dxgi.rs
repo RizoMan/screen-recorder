@@ -184,6 +184,11 @@ impl CaptureBackend for DxgiDesktopDuplicationBackend {
                     };
 
                     if acq.is_ok() {
+                        if frame_tx.is_full() {
+                            let _ = unsafe { duplication.ReleaseFrame() };
+                            std::thread::sleep(Duration::from_millis(4));
+                            continue;
+                        }
                         if let Some(resource) = desktop_resource {
                             if let Ok(desktop_texture) = resource.cast::<ID3D11Texture2D>() {
                                 let mut desc = D3D11_TEXTURE2D_DESC::default();

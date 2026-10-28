@@ -68,7 +68,7 @@ impl AudioBackend for WasapiAudioBackend {
                 move |data: &[f32], _: &cpal::InputCallbackInfo| {
                     let pts = Pts::from_duration(start_time.elapsed());
                     if let Ok(frame) = AudioFrame::new(sample_rate, channels, pts, data.to_vec()) {
-                        let _ = audio_tx.send(frame);
+                        let _ = audio_tx.try_send(frame);
                     }
                 },
                 move |err| {

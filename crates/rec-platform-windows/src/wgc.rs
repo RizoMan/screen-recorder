@@ -289,47 +289,49 @@ fn run_wgc_capture(
         let mut new_frame_data: Option<Vec<u8>> = None;
 
         if let Ok(wgc_frame) = frame_pool.TryGetNextFrame() {
-            if let Ok(surface) = wgc_frame.Surface() {
-                if let Ok(access) = surface.cast::<IDirect3DDxgiInterfaceAccess>() {
-                    // SAFETY: Acquiring ID3D11Texture2D from surface access and mapping staging texture
-                    unsafe {
-                        if let Ok(frame_tex) = access.GetInterface::<ID3D11Texture2D>() {
-                            ctx.CopyResource(&staging, &frame_tex);
-                            let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
-                            if ctx.Map(&staging, 0, D3D11_MAP_READ, 0, Some(&mut mapped)).is_ok() {
-                                let (final_w, final_h, buf) = match target {
-                                    CaptureTarget::Area { x, y, width: crop_w, height: crop_h } => {
-                                        let mon_x = mon.left;
-                                        let mon_y = mon.top;
-                                        let rel_x = (x as i32 - mon_x).max(0) as u32;
-                                        let rel_y = (y as i32 - mon_y).max(0) as u32;
-                                        let cw = crop_w.min(width.saturating_sub(rel_x)).max(2);
-                                        let ch = crop_h.min(height.saturating_sub(rel_y)).max(2);
-                                        let mut data = Vec::with_capacity((cw * ch * 4) as usize);
-                                        for row in 0..ch {
-                                            let row_ptr = (mapped.pData as *const u8)
-                                                .add(((rel_y + row) * mapped.RowPitch) as usize)
-                                                .add((rel_x * 4) as usize);
-                                            let slice = std::slice::from_raw_parts(row_ptr, (cw * 4) as usize);
-                                            data.extend_from_slice(slice);
+            if !frame_tx.is_full() {
+                if let Ok(surface) = wgc_frame.Surface() {
+                    if let Ok(access) = surface.cast::<IDirect3DDxgiInterfaceAccess>() {
+                        // SAFETY: Acquiring ID3D11Texture2D from surface access and mapping staging texture
+                        unsafe {
+                            if let Ok(frame_tex) = access.GetInterface::<ID3D11Texture2D>() {
+                                ctx.CopyResource(&staging, &frame_tex);
+                                let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
+                                if ctx.Map(&staging, 0, D3D11_MAP_READ, 0, Some(&mut mapped)).is_ok() {
+                                    let (final_w, final_h, buf) = match target {
+                                        CaptureTarget::Area { x, y, width: crop_w, height: crop_h } => {
+                                            let mon_x = mon.left;
+                                            let mon_y = mon.top;
+                                            let rel_x = (x as i32 - mon_x).max(0) as u32;
+                                            let rel_y = (y as i32 - mon_y).max(0) as u32;
+                                            let cw = crop_w.min(width.saturating_sub(rel_x)).max(2);
+                                            let ch = crop_h.min(height.saturating_sub(rel_y)).max(2);
+                                            let mut data = Vec::with_capacity((cw * ch * 4) as usize);
+                                            for row in 0..ch {
+                                                let row_ptr = (mapped.pData as *const u8)
+                                                    .add(((rel_y + row) * mapped.RowPitch) as usize)
+                                                    .add((rel_x * 4) as usize);
+                                                let slice = std::slice::from_raw_parts(row_ptr, (cw * 4) as usize);
+                                                data.extend_from_slice(slice);
+                                            }
+                                            (cw, ch, data)
                                         }
-                                        (cw, ch, data)
-                                    }
-                                    _ => {
-                                        let mut data = Vec::with_capacity((width * height * 4) as usize);
-                                        for row in 0..height {
-                                            let row_ptr = (mapped.pData as *const u8)
-                                                .add((row * mapped.RowPitch) as usize);
-                                            let slice = std::slice::from_raw_parts(row_ptr, (width * 4) as usize);
-                                            data.extend_from_slice(slice);
+                                        _ => {
+                                            let mut data = Vec::with_capacity((width * height * 4) as usize);
+                                            for row in 0..height {
+                                                let row_ptr = (mapped.pData as *const u8)
+                                                    .add((row * mapped.RowPitch) as usize);
+                                                let slice = std::slice::from_raw_parts(row_ptr, (width * 4) as usize);
+                                                data.extend_from_slice(slice);
+                                            }
+                                            (width, height, data)
                                         }
-                                        (width, height, data)
-                                    }
-                                };
-                                ctx.Unmap(&staging, 0);
+                                    };
+                                    ctx.Unmap(&staging, 0);
 
-                                last_dims = (final_w, final_h);
-                                new_frame_data = Some(buf);
+                                    last_dims = (final_w, final_h);
+                                    new_frame_data = Some(buf);
+                                }
                             }
                         }
                     }
@@ -450,27 +452,29 @@ fn run_gdi_capture(
             let target_fps = target_fps_flag.load(Ordering::Relaxed).clamp(1, 120);
             let frame_target_duration = Duration::from_nanos(1_000_000_000 / target_fps as u64);
 
-            let blt_res = BitBlt(
-                mem_dc,
-                0,
-                0,
-                width as i32,
-                height as i32,
-                Some(src_dc),
-                src_x,
-                src_y,
-                SRCCOPY,
-            );
+            if !frame_tx.is_full() {
+                let blt_res = BitBlt(
+                    mem_dc,
+                    0,
+                    0,
+                    width as i32,
+                    height as i32,
+                    Some(src_dc),
+                    src_x,
+                    src_y,
+                    SRCCOPY,
+                );
 
-            if blt_res.is_ok() && !bits_ptr.is_null() {
-                let _ = GdiFlush();
-                let slice = std::slice::from_raw_parts(bits_ptr as *const u8, buffer_size);
-                let frame_data = slice.to_vec();
+                if blt_res.is_ok() && !bits_ptr.is_null() {
+                    let _ = GdiFlush();
+                    let slice = std::slice::from_raw_parts(bits_ptr as *const u8, buffer_size);
+                    let frame_data = slice.to_vec();
 
-                let pts = Pts::from_duration(start_time.elapsed());
-                if let Ok(desc) = FrameDescriptor::new(width, height, PixelFormat::Bgra) {
-                    if let Ok(frame) = VideoFrame::new(desc, pts, frame_data) {
-                        let _ = frame_tx.try_send(frame);
+                    let pts = Pts::from_duration(start_time.elapsed());
+                    if let Ok(desc) = FrameDescriptor::new(width, height, PixelFormat::Bgra) {
+                        if let Ok(frame) = VideoFrame::new(desc, pts, frame_data) {
+                            let _ = frame_tx.try_send(frame);
+                        }
                     }
                 }
             }

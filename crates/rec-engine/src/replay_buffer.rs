@@ -6,14 +6,32 @@ use std::collections::VecDeque;
 use std::time::Duration;
 use parking_lot::Mutex;
 use rec_core::audio::AudioFrame;
-use rec_core::frame::VideoFrame;
+use rec_core::frame::{Pts, VideoFrame};
 use crate::errors::ReplayError;
+
+/// Strict hard ceiling on Instant Replay RAM usage (256 MB) to prevent out-of-memory errors
+/// at high resolutions (1080p/1440p/4K) or long replay windows.
+pub const MAX_REPLAY_MEMORY_BYTES: usize = 256 * 1024 * 1024;
+
+/// Compressed Motion-JPEG video frame stored in the circular Instant Replay buffer.
+#[derive(Debug, Clone)]
+pub struct EncodedReplayFrame {
+    /// Presentation timestamp of the frame.
+    pub pts: Pts,
+    /// Frame width in pixels.
+    pub width: u32,
+    /// Frame height in pixels.
+    pub height: u32,
+    /// Pre-encoded JPEG payload (~80x smaller than raw RGBA/BGRA).
+    pub jpeg_bytes: Vec<u8>,
+}
 
 /// Circular in-memory buffer storing recent video and audio frames.
 #[derive(Debug)]
 pub struct InstantReplayBuffer {
     max_duration: Duration,
     video_frames: Mutex<VecDeque<VideoFrame>>,
+    encoded_frames: Mutex<VecDeque<EncodedReplayFrame>>,
     audio_frames: Mutex<VecDeque<AudioFrame>>,
 }
 
@@ -38,11 +56,13 @@ impl InstantReplayBuffer {
         Self {
             max_duration,
             video_frames: Mutex::new(VecDeque::new()),
+            encoded_frames: Mutex::new(VecDeque::new()),
             audio_frames: Mutex::new(VecDeque::new()),
         }
     }
 
-    /// Pushes a newly captured video frame into the buffer, evicting frames older than `max_duration`.
+    /// Pushes a newly captured video frame into the buffer, evicting frames older than `max_duration`
+    /// or exceeding [`MAX_REPLAY_MEMORY_BYTES`].
     ///
     /// # Arguments
     ///
@@ -52,11 +72,53 @@ impl InstantReplayBuffer {
         let frame_pts = frame.pts.as_nanos();
         queue.push_back(frame);
 
-        // Evict expired frames
+        // Evict expired frames by timestamp
         let cutoff = frame_pts.saturating_sub(self.max_duration.as_nanos() as u64);
         while let Some(front) = queue.front() {
             if front.pts.as_nanos() < cutoff {
                 queue.pop_front();
+            } else {
+                break;
+            }
+        }
+
+        // Enforce deterministic memory cap (NFR-REPLAY-001)
+        let mut total_bytes: usize = queue.iter().map(|f| f.data.len()).sum();
+        while total_bytes > MAX_REPLAY_MEMORY_BYTES && queue.len() > 1 {
+            if let Some(removed) = queue.pop_front() {
+                total_bytes = total_bytes.saturating_sub(removed.data.len());
+            } else {
+                break;
+            }
+        }
+    }
+
+    /// Pushes a compressed JPEG video frame into the replay buffer, evicting expired frames
+    /// or frames exceeding [`MAX_REPLAY_MEMORY_BYTES`].
+    ///
+    /// # Arguments
+    ///
+    /// * `frame` - Pre-encoded JPEG frame metadata and payload.
+    pub fn push_encoded_frame(&self, frame: EncodedReplayFrame) {
+        let mut queue = self.encoded_frames.lock();
+        let frame_pts = frame.pts.as_nanos();
+        queue.push_back(frame);
+
+        // Evict expired frames by timestamp
+        let cutoff = frame_pts.saturating_sub(self.max_duration.as_nanos() as u64);
+        while let Some(front) = queue.front() {
+            if front.pts.as_nanos() < cutoff {
+                queue.pop_front();
+            } else {
+                break;
+            }
+        }
+
+        // Enforce deterministic memory cap (NFR-REPLAY-001)
+        let mut total_bytes: usize = queue.iter().map(|f| f.jpeg_bytes.len()).sum();
+        while total_bytes > MAX_REPLAY_MEMORY_BYTES && queue.len() > 1 {
+            if let Some(removed) = queue.pop_front() {
+                total_bytes = total_bytes.saturating_sub(removed.jpeg_bytes.len());
             } else {
                 break;
             }
@@ -83,17 +145,24 @@ impl InstantReplayBuffer {
         }
     }
 
-    /// Exports a snapshot clone of the currently buffered video frames.
+    /// Exports a snapshot clone of the currently buffered raw video frames.
     ///
     /// # Errors
     ///
-    /// Returns [`ReplayError::EmptyBuffer`] if no video frames are currently buffered.
+    /// Returns [`ReplayError::EmptyBuffer`] if no raw video frames are currently buffered.
     pub fn export_video_snapshot(&self) -> Result<Vec<VideoFrame>, ReplayError> {
         let queue = self.video_frames.lock();
         if queue.is_empty() {
             return Err(ReplayError::EmptyBuffer);
         }
         Ok(queue.iter().cloned().collect())
+    }
+
+    /// Exports a snapshot clone of the currently buffered compressed JPEG video frames.
+    #[must_use]
+    pub fn export_encoded_snapshot(&self) -> Vec<EncodedReplayFrame> {
+        let queue = self.encoded_frames.lock();
+        queue.iter().cloned().collect()
     }
 
     /// Exports a snapshot clone of the currently buffered audio frames.
@@ -106,7 +175,9 @@ impl InstantReplayBuffer {
     /// Returns the number of video frames currently buffered.
     #[must_use]
     pub fn video_count(&self) -> usize {
-        self.video_frames.lock().len()
+        let raw_len = self.video_frames.lock().len();
+        let enc_len = self.encoded_frames.lock().len();
+        raw_len + enc_len
     }
 
     /// Returns the number of audio frames currently buffered.
@@ -115,10 +186,19 @@ impl InstantReplayBuffer {
         self.audio_frames.lock().len()
     }
 
-    /// Clears all buffered frames.
+    /// Clears all buffered frames and releases their heap memory.
     pub fn clear(&self) {
-        self.video_frames.lock().clear();
-        self.audio_frames.lock().clear();
+        let mut vf = self.video_frames.lock();
+        vf.clear();
+        vf.shrink_to_fit();
+
+        let mut ef = self.encoded_frames.lock();
+        ef.clear();
+        ef.shrink_to_fit();
+
+        let mut af = self.audio_frames.lock();
+        af.clear();
+        af.shrink_to_fit();
     }
 }
 
@@ -146,5 +226,26 @@ mod tests {
         buffer.push_video_frame(f3);
         // f1 (0ns) should be evicted because 150ms - 100ms = 50ms cutoff
         assert_eq!(buffer.video_count(), 2);
+    }
+
+    #[test]
+    fn test_instant_replay_encoded_frames() {
+        let buffer = InstantReplayBuffer::new(Duration::from_millis(100));
+        buffer.push_encoded_frame(EncodedReplayFrame {
+            pts: Pts::from_nanos(0),
+            width: 1920,
+            height: 1080,
+            jpeg_bytes: vec![1, 2, 3],
+        });
+        buffer.push_encoded_frame(EncodedReplayFrame {
+            pts: Pts::from_nanos(150_000_000),
+            width: 1920,
+            height: 1080,
+            jpeg_bytes: vec![4, 5, 6],
+        });
+        assert_eq!(buffer.video_count(), 1);
+        let snap = buffer.export_encoded_snapshot();
+        assert_eq!(snap.len(), 1);
+        assert_eq!(snap[0].jpeg_bytes, vec![4, 5, 6]);
     }
 }

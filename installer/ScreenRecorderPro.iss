@@ -6,7 +6,7 @@
 ; =========================================================================
 
 #define MyAppName "Screen Recorder Pro"
-#define MyAppVersion "0.1.18"
+#define MyAppVersion "0.1.19"
 #define MyAppPublisher "Screen Recorder Team"
 #define MyAppURL "https://github.com/screenrecorder/screen-recorder"
 #define MyAppExeName "rec-app.exe"
