@@ -1,0 +1,24 @@
+[package]
+name = "rec-app"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Native GUI and CLI application for Screen Recorder"
+
+[dependencies]
+rec-core = { path = "../rec-core" }
+rec-engine = { path = "../rec-engine" }
+rec-platform-windows = { path = "../rec-platform-windows" }
+rec-platform-linux = { path = "../rec-platform-linux" }
+rec-platform-macos = { path = "../rec-platform-macos" }
+thiserror = "2.0"
+crossbeam-channel = "0.5"
+eframe = "0.35"
+rfd = "0.17"
+open = "5.4"
+log = "0.4"
+chrono = "0.4"
+
+[lints]
+workspace = true

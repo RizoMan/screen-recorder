@@ -1,0 +1,18 @@
+[package]
+name = "rec-engine"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Central pipeline orchestrator, DIP traits, Instant Replay buffer for Screen Recorder"
+
+[dependencies]
+rec-core = { path = "../rec-core" }
+thiserror = "2.0"
+crossbeam-channel = "0.5"
+parking_lot = "0.12"
+log = "0.4"
+chrono = "0.4"
+
+[lints]
+workspace = true

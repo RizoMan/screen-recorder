@@ -1,0 +1,23 @@
+# Rust build artifacts
+/target/
+
+# Generated distribution binaries (distribute via GitHub Releases)
+/dist/
+/installer/*.exe
+
+# Temporary scratch scripts and test recordings
+/scratch/
+/recordings/
+/*.avi
+/*.mp4
+
+# Windows OS metadata
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# IDE / Editor configurations
+.idea/
+.vscode/
+*.swp
+*.swo

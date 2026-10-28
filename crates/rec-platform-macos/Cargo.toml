@@ -1,0 +1,17 @@
+[package]
+name = "rec-platform-macos"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "macOS capture backend (ScreenCaptureKit, CoreAudio) for Screen Recorder"
+
+[dependencies]
+rec-core = { path = "../rec-core" }
+rec-engine = { path = "../rec-engine" }
+thiserror = "2.0"
+crossbeam-channel = "0.5"
+log = "0.4"
+
+[lints]
+workspace = true

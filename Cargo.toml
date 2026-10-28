@@ -1,0 +1,30 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/rec-core",
+    "crates/rec-platform-windows",
+    "crates/rec-platform-linux",
+    "crates/rec-platform-macos",
+    "crates/rec-engine",
+    "crates/rec-app",
+]
+default-members = ["crates/rec-app"]
+
+[workspace.package]
+version = "0.1.18"
+edition = "2021"
+authors = ["Screen Recorder Team <dev@screenrecorder.org>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/screenrecorder/screen-recorder"
+readme = "README.md"
+keywords = ["screen-recorder", "screen-capture", "dxgi", "pipewire", "screencapturekit"]
+categories = ["multimedia::video", "graphics"]
+
+[workspace.lints.rust]
+missing_docs = "deny"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
