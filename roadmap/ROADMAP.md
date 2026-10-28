@@ -11,8 +11,10 @@ Fecha de Actualización: 2026-10-08
 Para alcanzar el máximo valor de producto comercial con calidad de grado profesional, el desarrollo adopta la directriz estricta:
 **"Ir de menos a más técnicamente hablando, rellenando primero los huecos en lo que ya tenemos antes de abordar subsistemas masivos"**.
 
-### Estado Actual del Software (v0.1.18):
+### Estado Actual del Software (v0.1.20):
 - **100% Memoria Segura en Rust Idiomático** con Inversión de Dependencias (DIP) y `#![forbid(unsafe_code)]` en el núcleo (`rec-core`, `rec-engine`).
+- **Búfer de Repetición Comprimido con Techo Determinista de RAM (256 MB)** y canales acotados con contrapresión estricta en GPU/CPU (cero explosiones de RAM).
+- **Efectos Inteligentes de Cursor en Tiempo Real (`[SPEC-FEAT-CURSOR-001]`)**: Halo resaltador translúcido con radio ajustable (`12–64 px`), 3 paletas de color (`Amarillo Dorado`, `Azul Eléctrico`, `Verde Neón`) y animación de ondas expansivas en clics izquierdo (`#3B82F6`) y derecho (`#F59E0B`).
 - **Sincronización A/V de Precisión Sub-Frame (Cero Desfase, Cero Adelanto de Audio)**: Origen unificado de reloj monotónico (`session_epoch: Instant`) compartido entre backends de captura de video (WGC/DXGI) y audio (WASAPI loopback). Mapeo estricto de timestamps referenciado al primer cuadro de video real (T0), puenteo automático de silencios para retardos de inicialización del dispositivo de audio y descarte de muestras de pre-roll. Eliminación definitiva de cualquier adelanto o atraso de audio en VLC, WMP y editores de video.
 - **Indexación Jerárquica Completa OpenDML 2.0 (`indx` Super Index + `ix00`/`ix01` Standard Sub-Indices)**: Generación matemática de tablas de super-índice en cabeceras `strl` y sub-índices con `qwBaseOffset` de 64 bits en cada fragmento RIFF (AVI y AVIX). Erradicación definitiva y verificada con pruebas automáticas contra el reproductor VLC del aviso "Índice roto o perdido", permitiendo seeking instantáneo sin demoras ni advertencias en archivos de cualquier tamaño (5 GB, 20 GB, 100 GB).
 - **Compatibilidad Dual AVI 1.0 / OpenDML**: Inclusión paralela de tabla clásica `idx1` en el bloque primario para reproductores legados (Windows Media Player) y super-índices para suites modernas (VLC, Premiere, DaVinci, MPC-HC).
@@ -40,7 +42,7 @@ Para alcanzar el máximo valor de producto comercial con calidad de grado profes
                                          ▼
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │ NIVEL 2: QUICK WINS DE ALTO VALOR VISUAL (Baja Complejidad, Gran Salto de UX)   │
-│ • Halo visual de cursor y animación de ondas expansivas en clics (Click Ripple)  │
+│ • Halo visual de cursor y animación de ondas expansivas en clics [COMPLETADO v0.1.20]│
 │ • Exportación rápida de clips a formato GIF animado HD (5–15 segundos)           │
 │ • Herramienta "Quick Trim" (recorte sin recodificación de inicio y fin de video) │
 │ • Visualizador de teclas presionadas en vivo (Keycaster flotante)                │

@@ -5,6 +5,7 @@
 use std::path::PathBuf;
 use eframe::egui::{self, Color32, CornerRadius, RichText, Stroke, Vec2};
 use rec_core::config::AppConfig;
+use rec_core::cursor_effects::CursorHighlightColor;
 use rec_core::i18n::{text, I18nKey, Language};
 use rec_engine::pipeline::RecordingPipeline;
 use rec_engine::traits::CaptureTarget;
@@ -129,7 +130,6 @@ pub struct RecorderGuiApp {
     exit_requested: bool,
 
     // UI/UX Obsidian states
-    webcam_enabled: bool,
     mic_muted: bool,
     container_format: ContainerFormat,
     settings_cat: SettingsCategory,
@@ -198,7 +198,6 @@ impl RecorderGuiApp {
             #[cfg(target_os = "windows")]
             tray_manager,
             exit_requested: false,
-            webcam_enabled: false,
             mic_muted: false,
             container_format: ContainerFormat::Avi,
             settings_cat: SettingsCategory::VideoEncoder,
@@ -747,21 +746,43 @@ impl RecorderGuiApp {
                 ui.label(RichText::new("Micrófono USB (HyperX QuadCast)").size(11.0).color(TEXT_MUTED));
             });
 
-            // Column 3: Webcam PIP
+            // Column 3: Cursor Effects & Webcam PIP
             card_frame().show(&mut columns[2], |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("📷 {}", text(I18nKey::WebcamPipLabel, lang))).strong().color(TEXT_HEADLINE));
+                    ui.label(RichText::new(format!("🖱 {}", text(I18nKey::CursorHaloToggle, lang))).strong().color(TEXT_HEADLINE));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.checkbox(&mut self.webcam_enabled, "");
+                        if ui.checkbox(&mut self.config.cursor_halo_enabled, "").changed() {
+                            self.pipeline.set_config(self.config.clone());
+                        }
                     });
                 });
-                ui.add_space(6.0);
+                ui.add_space(4.0);
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(text(I18nKey::HwEncoderLabel, lang)).size(11.0).color(TEXT_MUTED));
-                    render_badge(ui, "NVENC H.264", Color32::from_rgb(0x06, 0x4E, 0x3B), COLOR_TERTIARY);
+                    ui.label(RichText::new(format!("✨ {}", text(I18nKey::CursorRipplesToggle, lang))).size(11.0).color(TEXT_BODY));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.checkbox(&mut self.config.cursor_click_ripples_enabled, "").changed() {
+                            self.pipeline.set_config(self.config.clone());
+                        }
+                    });
                 });
                 ui.add_space(4.0);
-                ui.label(RichText::new("DirectX D3D11 Compositor").size(11.0).color(TEXT_MUTED));
+                ui.horizontal(|ui| {
+                    let colors = [
+                        (CursorHighlightColor::YellowGlow, "🟡", text(I18nKey::CursorColorYellow, lang)),
+                        (CursorHighlightColor::ElectricBlue, "🔵", text(I18nKey::CursorColorBlue, lang)),
+                        (CursorHighlightColor::NeonEmerald, "🟢", text(I18nKey::CursorColorNeon, lang)),
+                    ];
+                    for (c, dot, tip) in colors {
+                        let sel = self.config.cursor_halo_color == c;
+                        if ui.selectable_label(sel, dot).on_hover_text(tip).clicked() {
+                            self.config.cursor_halo_color = c;
+                            self.pipeline.set_config(self.config.clone());
+                        }
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        render_badge(ui, "D3D11", Color32::from_rgb(0x06, 0x4E, 0x3B), COLOR_TERTIARY);
+                    });
+                });
             });
         });
 
@@ -1475,15 +1496,63 @@ impl RecorderGuiApp {
     }
 
     /// Renders the Performance & Buffer tab.
-    fn render_settings_perf(&mut self, ui: &mut egui::Ui, _lang: Language) {
-        ui.label(RichText::new("Rendimiento & Búfer de Repetición").size(16.0).strong().color(TEXT_HEADLINE));
+    fn render_settings_perf(&mut self, ui: &mut egui::Ui, lang: Language) {
+        ui.label(RichText::new(text(I18nKey::SettingsTabPerfBuffer, lang)).size(16.0).strong().color(TEXT_HEADLINE));
         ui.add_space(8.0);
 
+        let mut changed = false;
+
         card_frame().show(ui, |ui| {
-            ui.label("Duración de Búfer de Repetición Instantánea (RAM):");
-            ui.add(egui::Slider::new(&mut self.config.instant_replay_duration_secs, 5..=120).suffix(" s"));
-            ui.add_space(8.0);
-            ui.checkbox(&mut self.config.use_hardware_acceleration, "Activar Aceleración por Hardware Direct3D 11");
+            ui.label(RichText::new(format!("🖱 {}", text(I18nKey::CursorEffectsSection, lang))).strong().color(TEXT_HEADLINE));
+            ui.add_space(6.0);
+
+            if ui.checkbox(&mut self.config.cursor_halo_enabled, text(I18nKey::CursorHaloToggle, lang)).changed() {
+                changed = true;
+            }
+            if ui.checkbox(&mut self.config.cursor_click_ripples_enabled, text(I18nKey::CursorRipplesToggle, lang)).changed() {
+                changed = true;
+            }
+
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(text(I18nKey::CursorHaloRadiusLabel, lang)).color(TEXT_BODY));
+                if ui.add(egui::Slider::new(&mut self.config.cursor_halo_radius, 12..=64).suffix(" px")).changed() {
+                    changed = true;
+                }
+            });
+
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(text(I18nKey::CursorColorLabel, lang)).color(TEXT_BODY));
+                let presets = [
+                    (CursorHighlightColor::YellowGlow, format!("🟡 {}", text(I18nKey::CursorColorYellow, lang))),
+                    (CursorHighlightColor::ElectricBlue, format!("🔵 {}", text(I18nKey::CursorColorBlue, lang))),
+                    (CursorHighlightColor::NeonEmerald, format!("🟢 {}", text(I18nKey::CursorColorNeon, lang))),
+                ];
+                for (color, lbl) in presets {
+                    if ui.selectable_label(self.config.cursor_halo_color == color, lbl).clicked() {
+                        self.config.cursor_halo_color = color;
+                        changed = true;
+                    }
+                }
+            });
         });
+
+        ui.add_space(10.0);
+
+        card_frame().show(ui, |ui| {
+            ui.label(RichText::new(text(I18nKey::InstantReplaySave, lang)).strong().color(TEXT_HEADLINE));
+            if ui.add(egui::Slider::new(&mut self.config.instant_replay_duration_secs, 5..=120).suffix(" s")).changed() {
+                changed = true;
+            }
+            ui.add_space(8.0);
+            if ui.checkbox(&mut self.config.use_hardware_acceleration, text(I18nKey::HardwareAcceleration, lang)).changed() {
+                changed = true;
+            }
+        });
+
+        if changed {
+            self.pipeline.set_config(self.config.clone());
+        }
     }
 }

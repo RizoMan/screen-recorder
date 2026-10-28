@@ -4,6 +4,7 @@
 
 use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
+use crate::cursor_effects::CursorHighlightColor;
 use crate::errors::CoreError;
 use crate::i18n::Language;
 
@@ -34,6 +35,22 @@ pub struct AppConfig {
     pub use_hardware_acceleration: bool,
     /// UI font and element display scale percentage (75% to 200%, default 100%).
     pub font_scale_percent: u32,
+    /// Enables translucent visual highlight halo around the mouse cursor (`[REQ-CURSOR-001.1]`).
+    #[serde(default)]
+    pub cursor_halo_enabled: bool,
+    /// Enables expanding concentric ripple waves on mouse left/right clicks (`[REQ-CURSOR-001.2]`).
+    #[serde(default)]
+    pub cursor_click_ripples_enabled: bool,
+    /// Radius of the cursor highlight halo in pixels (12 to 64, default 28).
+    #[serde(default = "default_cursor_halo_radius")]
+    pub cursor_halo_radius: u32,
+    /// Selected color preset for the cursor highlight halo.
+    #[serde(default)]
+    pub cursor_halo_color: CursorHighlightColor,
+}
+
+const fn default_cursor_halo_radius() -> u32 {
+    28
 }
 
 impl Default for AppConfig {
@@ -59,6 +76,10 @@ impl Default for AppConfig {
             instant_replay_duration_secs: 30,
             use_hardware_acceleration: true,
             font_scale_percent: 100,
+            cursor_halo_enabled: false,
+            cursor_click_ripples_enabled: true,
+            cursor_halo_radius: 28,
+            cursor_halo_color: CursorHighlightColor::YellowGlow,
         }
     }
 }
@@ -86,6 +107,8 @@ impl AppConfig {
         self.system_audio_volume_percent = self.system_audio_volume_percent.clamp(0, 150);
         // Clamp microphone gain between 0% and 200%
         self.microphone_gain_percent = self.microphone_gain_percent.clamp(0, 200);
+        // Clamp cursor halo radius between 12 and 64 pixels
+        self.cursor_halo_radius = self.cursor_halo_radius.clamp(12, 64);
     }
 
     /// Validates the configuration and returns an error if any invariant is violated.

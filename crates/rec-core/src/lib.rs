@@ -16,6 +16,7 @@
 pub mod audio;
 pub mod avi_writer;
 pub mod config;
+pub mod cursor_effects;
 pub mod errors;
 pub mod frame;
 pub mod i18n;
@@ -25,6 +26,9 @@ pub mod ring_buffer;
 pub use audio::{AudioFrame, AudioMixer};
 pub use avi_writer::{encode_frame_to_jpeg, AviWriter};
 pub use config::AppConfig;
+pub use cursor_effects::{
+    apply_cursor_effects, ClickButton, ClickRipple, CursorHighlightColor, CursorOverlayState,
+};
 pub use errors::CoreError;
 pub use frame::{Dts, FrameDescriptor, Pts, VideoFrame};
 pub use i18n::{text, I18nKey, Language};

@@ -166,4 +166,5 @@ El proyecto se rige de manera inviolable por **SPEC-DRIVEN DEVELOPMENT (SDD)**, 
 | `[SPEC-PLAT-MAC-001]` | `specs/02_platform_macos/screencapturekit_capture.spec.md` | Captura ScreenCaptureKit y VideoToolbox en macOS |
 | `[SPEC-GUI-001]` | `specs/03_app_ui/recorder_gui_hud.spec.md` | GUI moderna, selector de área interactivo y HUD transparente |
 | `[SPEC-FEAT-REPLAY-001]` | `specs/04_features/01_instant_replay_buffer.spec.md` | Buffer circular de repetición instantánea en memoria |
+| `[SPEC-FEAT-CURSOR-001]` | `specs/04_features/02_smart_cursor_effects.spec.md` | Efectos inteligentes de cursor (Halo y ondas de clic) |
 | `[SPEC-QA-001]` | `specs/05_qa/manual_qa_playbook.spec.md` | Matriz de pruebas manuales, estabilidad y verificación de audio/video |

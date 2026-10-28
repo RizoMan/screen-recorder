@@ -175,6 +175,9 @@ impl RecordingPipeline {
 
     /// Updates active application configuration.
     pub fn set_config(&mut self, config: AppConfig) {
+        if let Some(backend) = self.capture_backend.as_mut() {
+            backend.update_config(&config);
+        }
         *self.active_config.lock() = config.clone();
         self.config = config;
     }
@@ -486,6 +489,7 @@ impl RecordingPipeline {
         if let Some(backend) = self.capture_backend.as_mut() {
             backend.set_epoch(session_epoch);
             backend.set_fps(self.config.fps);
+            backend.update_config(&self.config);
         }
         if let Some(backend) = self.audio_backend.as_mut() {
             backend.set_epoch(session_epoch);

@@ -74,6 +74,11 @@ pub trait CaptureBackend: Send + Sync {
     /// Default implementation does nothing.
     fn set_epoch(&mut self, _epoch: std::time::Instant) {}
 
+    /// Updates live capture configuration (such as cursor halo, click ripples, and FPS).
+    ///
+    /// Default implementation does nothing.
+    fn update_config(&mut self, _config: &AppConfig) {}
+
     /// Returns human-readable name of the backend (e.g., "Windows Graphics Capture", "PipeWire").
     fn backend_name(&self) -> &'static str;
 }

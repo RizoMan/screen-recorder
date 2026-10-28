@@ -6,10 +6,14 @@
 //! with seamless fallback to GDI DIBSection capture on legacy configurations.
 
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 use crossbeam_channel::Sender;
+use rec_core::config::AppConfig;
+use rec_core::cursor_effects::{
+    apply_cursor_effects, ClickButton, ClickRipple, CursorOverlayState,
+};
 use rec_core::frame::{FrameDescriptor, Pts, VideoFrame};
 use rec_core::pixel_format::PixelFormat;
 use rec_engine::errors::CaptureError;
@@ -17,6 +21,7 @@ use rec_engine::traits::{CaptureBackend, CaptureTarget};
 use windows::core::{factory, Interface, PCWSTR};
 use windows::Graphics::Capture::{Direct3D11CaptureFramePool, GraphicsCaptureItem};
 use windows::Graphics::DirectX::DirectXPixelFormat;
+use windows::Win32::Foundation::POINT;
 use windows::Win32::Graphics::Direct3D::{
     D3D_DRIVER_TYPE_HARDWARE, D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_11_0,
 };
@@ -36,8 +41,96 @@ use windows::Win32::System::WinRT::Direct3D11::{
     CreateDirect3D11DeviceFromDXGIDevice, IDirect3DDxgiInterfaceAccess,
 };
 use windows::Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop;
+use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
+use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
 
 use crate::monitors::{enumerate_monitors, MonitorInfo};
+
+/// Tracks live Win32 mouse coordinates and left/right click transitions for `[SPEC-FEAT-CURSOR-001]`.
+struct Win32CursorTracker {
+    prev_left_down: bool,
+    prev_right_down: bool,
+    active_ripples: Vec<(i32, i32, ClickButton, Instant)>,
+}
+
+impl Win32CursorTracker {
+    fn new() -> Self {
+        Self {
+            prev_left_down: false,
+            prev_right_down: false,
+            active_ripples: Vec::with_capacity(8),
+        }
+    }
+
+    fn apply_to_frame(&mut self, frame: &mut VideoFrame, origin_x: i32, origin_y: i32, cfg: &AppConfig) {
+        if !cfg.cursor_halo_enabled && !cfg.cursor_click_ripples_enabled {
+            self.active_ripples.clear();
+            return;
+        }
+
+        let mut pt = POINT::default();
+        // SAFETY: Querying desktop cursor coordinates and async mouse button state via Win32 user32 APIs
+        let (cursor_ok, left_down, right_down) = unsafe {
+            let ok = GetCursorPos(&mut pt).is_ok();
+            let l = (GetAsyncKeyState(i32::from(VK_LBUTTON.0)) as u16 & 0x8000) != 0;
+            let r = (GetAsyncKeyState(i32::from(VK_RBUTTON.0)) as u16 & 0x8000) != 0;
+            (ok, l, r)
+        };
+
+        if !cursor_ok {
+            return;
+        }
+
+        let rel_x = pt.x - origin_x;
+        let rel_y = pt.y - origin_y;
+        let fw = frame.descriptor.width as i32;
+        let fh = frame.descriptor.height as i32;
+        let inside = rel_x >= 0 && rel_x < fw && rel_y >= 0 && rel_y < fh;
+
+        let now = Instant::now();
+        if cfg.cursor_click_ripples_enabled && inside {
+            if left_down && !self.prev_left_down {
+                self.active_ripples.push((rel_x, rel_y, ClickButton::Left, now));
+            }
+            if right_down && !self.prev_right_down {
+                self.active_ripples.push((rel_x, rel_y, ClickButton::Right, now));
+            }
+        }
+        self.prev_left_down = left_down;
+        self.prev_right_down = right_down;
+
+        const RIPPLE_DURATION_SECS: f32 = 0.36;
+        self.active_ripples
+            .retain(|&(_, _, _, t)| now.saturating_duration_since(t).as_secs_f32() < RIPPLE_DURATION_SECS);
+
+        let ripples: Vec<ClickRipple> = if cfg.cursor_click_ripples_enabled {
+            self.active_ripples
+                .iter()
+                .map(|&(x, y, button, t)| ClickRipple {
+                    x,
+                    y,
+                    button,
+                    progress: (now.saturating_duration_since(t).as_secs_f32() / RIPPLE_DURATION_SECS)
+                        .clamp(0.0, 1.0),
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        let state = CursorOverlayState {
+            cursor_x: rel_x,
+            cursor_y: rel_y,
+            cursor_visible: inside,
+            halo_enabled: cfg.cursor_halo_enabled,
+            halo_radius: cfg.cursor_halo_radius,
+            halo_color: cfg.cursor_halo_color,
+            ripples,
+        };
+
+        apply_cursor_effects(frame, &state);
+    }
+}
 
 #[cfg(windows)]
 #[link(name = "winmm")]
@@ -74,6 +167,7 @@ impl Drop for HighResolutionTimerGuard {
 pub struct WgcCaptureBackend {
     is_capturing: Arc<AtomicBool>,
     target_fps: Arc<AtomicU32>,
+    active_config: Arc<Mutex<AppConfig>>,
     worker_handle: Option<JoinHandle<()>>,
     epoch: Option<Instant>,
 }
@@ -91,6 +185,7 @@ impl WgcCaptureBackend {
         Self {
             is_capturing: Arc::new(AtomicBool::new(false)),
             target_fps: Arc::new(AtomicU32::new(60)),
+            active_config: Arc::new(Mutex::new(AppConfig::new())),
             worker_handle: None,
             epoch: None,
         }
@@ -100,6 +195,13 @@ impl WgcCaptureBackend {
 impl CaptureBackend for WgcCaptureBackend {
     fn set_epoch(&mut self, epoch: Instant) {
         self.epoch = Some(epoch);
+    }
+
+    fn update_config(&mut self, config: &AppConfig) {
+        self.target_fps.store(config.fps.clamp(1, 120), Ordering::SeqCst);
+        if let Ok(mut guard) = self.active_config.lock() {
+            *guard = config.clone();
+        }
     }
 
     fn start_capture(
@@ -115,6 +217,7 @@ impl CaptureBackend for WgcCaptureBackend {
         self.is_capturing.store(true, Ordering::SeqCst);
         let capturing_flag = Arc::clone(&self.is_capturing);
         let target_fps_flag = Arc::clone(&self.target_fps);
+        let config_slot = Arc::clone(&self.active_config);
 
         let handle = std::thread::Builder::new()
             .name("wgc-capture-thread".to_string())
@@ -148,6 +251,7 @@ impl CaptureBackend for WgcCaptureBackend {
                         target.clone(),
                         &capturing_flag,
                         &target_fps_flag,
+                        &config_slot,
                         start_time,
                         &frame_tx,
                     );
@@ -161,6 +265,7 @@ impl CaptureBackend for WgcCaptureBackend {
                         target,
                         &capturing_flag,
                         &target_fps_flag,
+                        &config_slot,
                         start_time,
                         &frame_tx,
                     );
@@ -199,6 +304,7 @@ fn run_wgc_capture(
     target: CaptureTarget,
     capturing_flag: &Arc<AtomicBool>,
     target_fps_flag: &Arc<AtomicU32>,
+    config_slot: &Arc<Mutex<AppConfig>>,
     start_time: Instant,
     frame_tx: &Sender<VideoFrame>,
 ) -> bool {
@@ -281,63 +387,82 @@ fn run_wgc_capture(
     let _timer_guard = HighResolutionTimerGuard::new();
     let mut next_frame_time = Instant::now();
     let mut last_dims = (width, height);
+    let mut has_valid_staging = false;
+    let mut cursor_tracker = Win32CursorTracker::new();
+
+    let (origin_x, origin_y) = match target {
+        CaptureTarget::Area { x, y, .. } => (x as i32, y as i32),
+        _ => (mon.left, mon.top),
+    };
 
     while capturing_flag.load(Ordering::Relaxed) {
         let target_fps = target_fps_flag.load(Ordering::Relaxed).clamp(1, 120);
         let frame_target_duration = Duration::from_nanos(1_000_000_000 / target_fps as u64);
 
-        let mut new_frame_data: Option<Vec<u8>> = None;
+        let mut should_map_staging = false;
 
         if let Ok(wgc_frame) = frame_pool.TryGetNextFrame() {
             if !frame_tx.is_full() {
                 if let Ok(surface) = wgc_frame.Surface() {
                     if let Ok(access) = surface.cast::<IDirect3DDxgiInterfaceAccess>() {
-                        // SAFETY: Acquiring ID3D11Texture2D from surface access and mapping staging texture
+                        // SAFETY: Acquiring ID3D11Texture2D from surface access and copying to staging texture
                         unsafe {
                             if let Ok(frame_tex) = access.GetInterface::<ID3D11Texture2D>() {
                                 ctx.CopyResource(&staging, &frame_tex);
-                                let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
-                                if ctx.Map(&staging, 0, D3D11_MAP_READ, 0, Some(&mut mapped)).is_ok() {
-                                    let (final_w, final_h, buf) = match target {
-                                        CaptureTarget::Area { x, y, width: crop_w, height: crop_h } => {
-                                            let mon_x = mon.left;
-                                            let mon_y = mon.top;
-                                            let rel_x = (x as i32 - mon_x).max(0) as u32;
-                                            let rel_y = (y as i32 - mon_y).max(0) as u32;
-                                            let cw = crop_w.min(width.saturating_sub(rel_x)).max(2);
-                                            let ch = crop_h.min(height.saturating_sub(rel_y)).max(2);
-                                            let mut data = Vec::with_capacity((cw * ch * 4) as usize);
-                                            for row in 0..ch {
-                                                let row_ptr = (mapped.pData as *const u8)
-                                                    .add(((rel_y + row) * mapped.RowPitch) as usize)
-                                                    .add((rel_x * 4) as usize);
-                                                let slice = std::slice::from_raw_parts(row_ptr, (cw * 4) as usize);
-                                                data.extend_from_slice(slice);
-                                            }
-                                            (cw, ch, data)
-                                        }
-                                        _ => {
-                                            let mut data = Vec::with_capacity((width * height * 4) as usize);
-                                            for row in 0..height {
-                                                let row_ptr = (mapped.pData as *const u8)
-                                                    .add((row * mapped.RowPitch) as usize);
-                                                let slice = std::slice::from_raw_parts(row_ptr, (width * 4) as usize);
-                                                data.extend_from_slice(slice);
-                                            }
-                                            (width, height, data)
-                                        }
-                                    };
-                                    ctx.Unmap(&staging, 0);
-
-                                    last_dims = (final_w, final_h);
-                                    new_frame_data = Some(buf);
-                                }
+                                has_valid_staging = true;
+                                should_map_staging = true;
                             }
                         }
                     }
                 }
             }
             let _ = wgc_frame.Close();
+        } else if has_valid_staging && !frame_tx.is_full() && !cursor_tracker.active_ripples.is_empty() {
+            // Keep animating active click ripples smoothly even if desktop content is static
+            should_map_staging = true;
+        }
+
+        let mut new_frame_data: Option<Vec<u8>> = None;
+        if should_map_staging {
+            // SAFETY: Mapping the D3D11 staging texture for CPU read access
+            unsafe {
+                let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
+                if ctx.Map(&staging, 0, D3D11_MAP_READ, 0, Some(&mut mapped)).is_ok() {
+                    let (final_w, final_h, buf) = match target {
+                        CaptureTarget::Area { x, y, width: crop_w, height: crop_h } => {
+                            let mon_x = mon.left;
+                            let mon_y = mon.top;
+                            let rel_x = (x as i32 - mon_x).max(0) as u32;
+                            let rel_y = (y as i32 - mon_y).max(0) as u32;
+                            let cw = crop_w.min(width.saturating_sub(rel_x)).max(2);
+                            let ch = crop_h.min(height.saturating_sub(rel_y)).max(2);
+                            let mut data = Vec::with_capacity((cw * ch * 4) as usize);
+                            for row in 0..ch {
+                                let row_ptr = (mapped.pData as *const u8)
+                                    .add(((rel_y + row) * mapped.RowPitch) as usize)
+                                    .add((rel_x * 4) as usize);
+                                let slice = std::slice::from_raw_parts(row_ptr, (cw * 4) as usize);
+                                data.extend_from_slice(slice);
+                            }
+                            (cw, ch, data)
+                        }
+                        _ => {
+                            let mut data = Vec::with_capacity((width * height * 4) as usize);
+                            for row in 0..height {
+                                let row_ptr = (mapped.pData as *const u8)
+                                    .add((row * mapped.RowPitch) as usize);
+                                let slice = std::slice::from_raw_parts(row_ptr, (width * 4) as usize);
+                                data.extend_from_slice(slice);
+                            }
+                            (width, height, data)
+                        }
+                    };
+                    ctx.Unmap(&staging, 0);
+
+                    last_dims = (final_w, final_h);
+                    new_frame_data = Some(buf);
+                }
+            }
         }
 
         // Only dispatch to encoder pool when a real new frame has arrived from GPU.
@@ -345,7 +470,10 @@ fn run_wgc_capture(
         if let Some(buf) = new_frame_data {
             let pts = Pts::from_duration(start_time.elapsed());
             if let Ok(desc) = FrameDescriptor::new(last_dims.0, last_dims.1, PixelFormat::Bgra) {
-                if let Ok(frame) = VideoFrame::new(desc, pts, buf) {
+                if let Ok(mut frame) = VideoFrame::new(desc, pts, buf) {
+                    if let Ok(cfg) = config_slot.lock() {
+                        cursor_tracker.apply_to_frame(&mut frame, origin_x, origin_y, &cfg);
+                    }
                     let _ = frame_tx.try_send(frame);
                 }
             }
@@ -372,21 +500,22 @@ fn run_gdi_capture(
     target: CaptureTarget,
     capturing_flag: &Arc<AtomicBool>,
     target_fps_flag: &Arc<AtomicU32>,
+    config_slot: &Arc<Mutex<AppConfig>>,
     start_time: Instant,
     frame_tx: &Sender<VideoFrame>,
 ) {
-    let (dev_name, src_x, src_y, width, height) = match target {
+    let (dev_name, src_x, src_y, width, height, origin_x, origin_y) = match target {
         CaptureTarget::FullScreen { .. } => {
             if let Some(m) = mon {
-                (Some(m.name.clone()), 0, 0, m.width.max(160), m.height.max(120))
+                (Some(m.name.clone()), 0, 0, m.width.max(160), m.height.max(120), m.left, m.top)
             } else {
-                (None, 0, 0, 1920, 1080)
+                (None, 0, 0, 1920, 1080, 0, 0)
             }
         }
         CaptureTarget::Area { x, y, width, height } => {
-            (None, x as i32, y as i32, width.max(160), height.max(120))
+            (None, x as i32, y as i32, width.max(160), height.max(120), x as i32, y as i32)
         }
-        _ => (None, 0, 0, 1920, 1080),
+        _ => (None, 0, 0, 1920, 1080, 0, 0),
     };
 
     // SAFETY: Safe initialization of Win32 GDI capture context
@@ -447,6 +576,7 @@ fn run_gdi_capture(
         let buffer_size = (width * height * 4) as usize;
         let _timer_guard = HighResolutionTimerGuard::new();
         let mut next_frame_time = Instant::now();
+        let mut cursor_tracker = Win32CursorTracker::new();
 
         while capturing_flag.load(Ordering::Relaxed) {
             let target_fps = target_fps_flag.load(Ordering::Relaxed).clamp(1, 120);
@@ -472,7 +602,10 @@ fn run_gdi_capture(
 
                     let pts = Pts::from_duration(start_time.elapsed());
                     if let Ok(desc) = FrameDescriptor::new(width, height, PixelFormat::Bgra) {
-                        if let Ok(frame) = VideoFrame::new(desc, pts, frame_data) {
+                        if let Ok(mut frame) = VideoFrame::new(desc, pts, frame_data) {
+                            if let Ok(cfg) = config_slot.lock() {
+                                cursor_tracker.apply_to_frame(&mut frame, origin_x, origin_y, &cfg);
+                            }
                             let _ = frame_tx.try_send(frame);
                         }
                     }

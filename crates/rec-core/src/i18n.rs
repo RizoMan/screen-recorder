@@ -236,6 +236,22 @@ pub enum I18nKey {
     AudioSampleRateLabel,
     /// Detailed description for audio format specs.
     AudioSpecsDescription,
+    /// Section title for Smart Cursor Effects in settings and dashboard.
+    CursorEffectsSection,
+    /// Toggle label for translucent cursor highlight halo.
+    CursorHaloToggle,
+    /// Toggle label for expanding mouse click ripple animations.
+    CursorRipplesToggle,
+    /// Slider label for cursor halo radius in pixels.
+    CursorHaloRadiusLabel,
+    /// Selector label for cursor halo highlight color.
+    CursorColorLabel,
+    /// Color preset label: Golden Yellow Glow.
+    CursorColorYellow,
+    /// Color preset label: Electric Blue.
+    CursorColorBlue,
+    /// Color preset label: Neon Emerald.
+    CursorColorNeon,
 }
 
 impl I18nKey {
@@ -341,6 +357,14 @@ impl I18nKey {
             I18nKey::BtnUnmute,
             I18nKey::AudioSampleRateLabel,
             I18nKey::AudioSpecsDescription,
+            I18nKey::CursorEffectsSection,
+            I18nKey::CursorHaloToggle,
+            I18nKey::CursorRipplesToggle,
+            I18nKey::CursorHaloRadiusLabel,
+            I18nKey::CursorColorLabel,
+            I18nKey::CursorColorYellow,
+            I18nKey::CursorColorBlue,
+            I18nKey::CursorColorNeon,
         ]
     }
 }
@@ -468,6 +492,14 @@ pub fn text(key: I18nKey, lang: Language) -> &'static str {
             I18nKey::BtnUnmute => "Unmute",
             I18nKey::AudioSampleRateLabel => "Sample Rate & Precision",
             I18nKey::AudioSpecsDescription => "48,000 Hz • Stereo Float32 PCM • Sub-1ms Mix",
+            I18nKey::CursorEffectsSection => "Smart Cursor Effects (Halo & Click Ripples)",
+            I18nKey::CursorHaloToggle => "Cursor Highlight Halo",
+            I18nKey::CursorRipplesToggle => "Click Ripple Waves",
+            I18nKey::CursorHaloRadiusLabel => "Halo Radius",
+            I18nKey::CursorColorLabel => "Halo Color",
+            I18nKey::CursorColorYellow => "Golden Yellow",
+            I18nKey::CursorColorBlue => "Electric Blue",
+            I18nKey::CursorColorNeon => "Neon Emerald",
         },
         Language::Spanish => match key {
             I18nKey::AppTitle => "Screen Recorder Pro",
@@ -568,6 +600,14 @@ pub fn text(key: I18nKey, lang: Language) -> &'static str {
             I18nKey::BtnUnmute => "Activar Sonido",
             I18nKey::AudioSampleRateLabel => "Frecuencia de Muestreo y Precisión",
             I18nKey::AudioSpecsDescription => "48.000 Hz • PCM Estéreo Float32 • Mezcla Sub-1ms",
+            I18nKey::CursorEffectsSection => "Efectos Inteligentes de Cursor (Halo y Clics)",
+            I18nKey::CursorHaloToggle => "Halo Resaltador de Cursor",
+            I18nKey::CursorRipplesToggle => "Ondas de Clic (Ripples)",
+            I18nKey::CursorHaloRadiusLabel => "Radio del Halo",
+            I18nKey::CursorColorLabel => "Color del Halo",
+            I18nKey::CursorColorYellow => "Amarillo Dorado",
+            I18nKey::CursorColorBlue => "Azul Eléctrico",
+            I18nKey::CursorColorNeon => "Verde Neón",
         },
     }
 }
