@@ -113,7 +113,18 @@ impl AudioFrame {
     ///
     /// # Arguments
     ///
-    /// * `gain` - Multiplier factor (e.g. 1.5 for +50%, 0.0 for silence).
+    /// * `gain` - Multiplier factor (e.g. `1.5` for +50%, `0.0` for silence).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use rec_core::audio::AudioFrame;
+    /// use rec_core::frame::Pts;
+    ///
+    /// let mut frame = AudioFrame::new(48000, 2, Pts::from_nanos(0), vec![0.4, -0.4]).unwrap();
+    /// frame.apply_gain(0.5);
+    /// assert!((frame.samples[0] - 0.2).abs() < 1e-5);
+    /// ```
     pub fn apply_gain(&mut self, gain: f32) {
         AudioMixer::apply_gain(&mut self.samples, gain);
     }

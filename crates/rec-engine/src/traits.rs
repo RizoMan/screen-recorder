@@ -62,24 +62,38 @@ pub trait CaptureBackend: Send + Sync {
     fn stop_capture(&mut self) -> Result<(), CaptureError>;
 
     /// Checks if the backend is actively capturing frames.
+    ///
+    /// # Returns
+    ///
+    /// `true` if capture is currently running, `false` otherwise.
     fn is_capturing(&self) -> bool;
 
     /// Configures the desired capture framerate.
     ///
-    /// Default implementation does nothing.
+    /// # Arguments
+    ///
+    /// * `_fps` - Target framerate in frames per second.
     fn set_fps(&mut self, _fps: u32) {}
 
     /// Sets a shared session epoch timestamp for unified monotonic A/V synchronization.
     ///
-    /// Default implementation does nothing.
+    /// # Arguments
+    ///
+    /// * `_epoch` - Shared monotonic start [`std::time::Instant`].
     fn set_epoch(&mut self, _epoch: std::time::Instant) {}
 
     /// Updates live capture configuration (such as cursor halo, click ripples, and FPS).
     ///
-    /// Default implementation does nothing.
+    /// # Arguments
+    ///
+    /// * `_config` - Updated application configuration reference.
     fn update_config(&mut self, _config: &AppConfig) {}
 
-    /// Returns human-readable name of the backend (e.g., "Windows Graphics Capture", "PipeWire").
+    /// Returns human-readable name of the backend (e.g., `"Windows Graphics Capture"`, `"PipeWire"`).
+    ///
+    /// # Returns
+    ///
+    /// Static string slice identifying the capture implementation.
     fn backend_name(&self) -> &'static str;
 }
 
@@ -104,14 +118,24 @@ pub trait AudioBackend: Send + Sync {
     fn stop_audio_capture(&mut self) -> Result<(), AudioError>;
 
     /// Checks if audio capture is actively running.
+    ///
+    /// # Returns
+    ///
+    /// `true` if audio acquisition is active, `false` otherwise.
     fn is_capturing(&self) -> bool;
 
     /// Sets a shared session epoch timestamp for unified monotonic A/V synchronization.
     ///
-    /// Default implementation does nothing.
+    /// # Arguments
+    ///
+    /// * `_epoch` - Shared monotonic start [`std::time::Instant`].
     fn set_epoch(&mut self, _epoch: std::time::Instant) {}
 
-    /// Returns human-readable name of the audio backend (e.g., "WASAPI Loopback", "CoreAudio").
+    /// Returns human-readable name of the audio backend (e.g., `"WASAPI Loopback"`, `"CoreAudio"`).
+    ///
+    /// # Returns
+    ///
+    /// Static string slice identifying the audio implementation.
     fn backend_name(&self) -> &'static str;
 }
 

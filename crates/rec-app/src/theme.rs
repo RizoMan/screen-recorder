@@ -39,6 +39,10 @@ pub const TEXT_BODY: Color32 = Color32::from_rgb(0xC9, 0xD1, 0xD9);
 pub const TEXT_MUTED: Color32 = Color32::from_rgb(0x8B, 0x94, 0x9E);
 
 /// Configures the global `egui::Context` with the Obsidian design system.
+///
+/// # Arguments
+///
+/// * `ctx` - Reference to the active `egui::Context` to style.
 pub fn configure_obsidian_theme(ctx: &egui::Context) {
     let mut visuals = egui::Visuals::dark();
 
@@ -76,6 +80,10 @@ pub fn configure_obsidian_theme(ctx: &egui::Context) {
 }
 
 /// Installs native system fonts (Segoe UI and Segoe UI Symbol on Windows) for crisp typography and glyph support.
+///
+/// # Arguments
+///
+/// * `ctx` - Reference to the active `egui::Context` where fonts are registered.
 pub fn setup_custom_fonts(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
 
@@ -109,8 +117,11 @@ pub fn setup_custom_fonts(ctx: &egui::Context) {
     ctx.set_fonts(fonts);
 }
 
-
 /// Standard card container frame conforming to `[REQ-UIUX-001]`.
+///
+/// # Returns
+///
+/// Configured `egui::Frame` with Obsidian card styling.
 pub fn card_frame() -> Frame {
     Frame::new()
         .fill(BG_CARD)
@@ -120,6 +131,10 @@ pub fn card_frame() -> Frame {
 }
 
 /// Elevated input / control frame.
+///
+/// # Returns
+///
+/// Configured `egui::Frame` with elevated background styling.
 pub fn elevated_frame() -> Frame {
     Frame::new()
         .fill(BG_ELEVATED)
@@ -128,7 +143,14 @@ pub fn elevated_frame() -> Frame {
         .inner_margin(Margin::symmetric(10, 6))
 }
 
-/// Renders a live dual/single VU meter level bar in Emerald Green.
+/// Renders a live VU meter level bar with dynamic Emerald/Amber/Red peak coloring.
+///
+/// # Arguments
+///
+/// * `ui` - Active `egui::Ui` region.
+/// * `peak` - Normalized audio amplitude peak (`0.0..=1.0`).
+/// * `width` - Total horizontal width of the meter bar in points.
+/// * `height` - Total vertical height of the meter bar in points.
 pub fn render_vu_meter(ui: &mut egui::Ui, peak: f32, width: f32, height: f32) {
     let (rect, _response) = ui.allocate_exact_size(Vec2::new(width, height), egui::Sense::hover());
     let painter = ui.painter();
@@ -141,7 +163,7 @@ pub fn render_vu_meter(ui: &mut egui::Ui, peak: f32, width: f32, height: f32) {
     if clamped_peak > 0.005 {
         let active_width = (rect.width() * clamped_peak).max(height);
         let active_rect = Rect::from_min_size(rect.min, Vec2::new(active_width, height));
-        
+
         let fill_color = if clamped_peak > 0.85 {
             COLOR_SECONDARY // Red peak warning
         } else if clamped_peak > 0.65 {
@@ -150,11 +172,22 @@ pub fn render_vu_meter(ui: &mut egui::Ui, peak: f32, width: f32, height: f32) {
             COLOR_TERTIARY // Emerald green nominal
         };
 
-        painter.rect_filled(active_rect, CornerRadius::same(height as u8 / 2), fill_color);
+        painter.rect_filled(
+            active_rect,
+            CornerRadius::same(height as u8 / 2),
+            fill_color,
+        );
     }
 }
 
 /// Renders a pill badge widget with custom background and text color.
+///
+/// # Arguments
+///
+/// * `ui` - Active `egui::Ui` region.
+/// * `text` - Badge label string.
+/// * `bg_color` - Pill background fill color.
+/// * `text_color` - Foreground text color.
 pub fn render_badge(ui: &mut egui::Ui, text: &str, bg_color: Color32, text_color: Color32) {
     Frame::new()
         .fill(bg_color)

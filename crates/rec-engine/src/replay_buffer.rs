@@ -35,12 +35,44 @@ pub struct InstantReplayBuffer {
     audio_frames: Mutex<VecDeque<AudioFrame>>,
 }
 
+/// Evicts items older than `max_duration` relative to `latest_pts_nanos` and enforces
+/// [`MAX_REPLAY_MEMORY_BYTES`] on a bounded [`VecDeque`] (DRY helper).
+fn evict_expired_and_cap_memory<T>(
+    queue: &mut VecDeque<T>,
+    latest_pts_nanos: u64,
+    max_duration: Duration,
+    pts_fn: impl Fn(&T) -> u64,
+    bytes_fn: impl Fn(&T) -> usize,
+) {
+    let cutoff = latest_pts_nanos.saturating_sub(max_duration.as_nanos() as u64);
+    while let Some(front) = queue.front() {
+        if pts_fn(front) < cutoff {
+            queue.pop_front();
+        } else {
+            break;
+        }
+    }
+
+    let mut total_bytes: usize = queue.iter().map(&bytes_fn).sum();
+    while total_bytes > MAX_REPLAY_MEMORY_BYTES && queue.len() > 1 {
+        if let Some(removed) = queue.pop_front() {
+            total_bytes = total_bytes.saturating_sub(bytes_fn(&removed));
+        } else {
+            break;
+        }
+    }
+}
+
 impl InstantReplayBuffer {
-    /// Creates a new `InstantReplayBuffer` with the specified maximum retention duration.
+    /// Creates a new [`InstantReplayBuffer`] with the specified maximum retention duration.
     ///
     /// # Arguments
     ///
     /// * `max_duration` - Maximum time window to retain (e.g. 30 seconds).
+    ///
+    /// # Returns
+    ///
+    /// A newly initialized, empty [`InstantReplayBuffer`].
     ///
     /// # Examples
     ///
@@ -71,26 +103,13 @@ impl InstantReplayBuffer {
         let mut queue = self.video_frames.lock();
         let frame_pts = frame.pts.as_nanos();
         queue.push_back(frame);
-
-        // Evict expired frames by timestamp
-        let cutoff = frame_pts.saturating_sub(self.max_duration.as_nanos() as u64);
-        while let Some(front) = queue.front() {
-            if front.pts.as_nanos() < cutoff {
-                queue.pop_front();
-            } else {
-                break;
-            }
-        }
-
-        // Enforce deterministic memory cap (NFR-REPLAY-001)
-        let mut total_bytes: usize = queue.iter().map(|f| f.data.len()).sum();
-        while total_bytes > MAX_REPLAY_MEMORY_BYTES && queue.len() > 1 {
-            if let Some(removed) = queue.pop_front() {
-                total_bytes = total_bytes.saturating_sub(removed.data.len());
-            } else {
-                break;
-            }
-        }
+        evict_expired_and_cap_memory(
+            &mut queue,
+            frame_pts,
+            self.max_duration,
+            |f| f.pts.as_nanos(),
+            |f| f.data.len(),
+        );
     }
 
     /// Pushes a compressed JPEG video frame into the replay buffer, evicting expired frames
@@ -103,26 +122,13 @@ impl InstantReplayBuffer {
         let mut queue = self.encoded_frames.lock();
         let frame_pts = frame.pts.as_nanos();
         queue.push_back(frame);
-
-        // Evict expired frames by timestamp
-        let cutoff = frame_pts.saturating_sub(self.max_duration.as_nanos() as u64);
-        while let Some(front) = queue.front() {
-            if front.pts.as_nanos() < cutoff {
-                queue.pop_front();
-            } else {
-                break;
-            }
-        }
-
-        // Enforce deterministic memory cap (NFR-REPLAY-001)
-        let mut total_bytes: usize = queue.iter().map(|f| f.jpeg_bytes.len()).sum();
-        while total_bytes > MAX_REPLAY_MEMORY_BYTES && queue.len() > 1 {
-            if let Some(removed) = queue.pop_front() {
-                total_bytes = total_bytes.saturating_sub(removed.jpeg_bytes.len());
-            } else {
-                break;
-            }
-        }
+        evict_expired_and_cap_memory(
+            &mut queue,
+            frame_pts,
+            self.max_duration,
+            |f| f.pts.as_nanos(),
+            |f| f.jpeg_bytes.len(),
+        );
     }
 
     /// Pushes an audio frame into the buffer, evicting frames older than `max_duration`.
@@ -147,6 +153,10 @@ impl InstantReplayBuffer {
 
     /// Exports a snapshot clone of the currently buffered raw video frames.
     ///
+    /// # Returns
+    ///
+    /// Ordered vector of buffered [`VideoFrame`] instances.
+    ///
     /// # Errors
     ///
     /// Returns [`ReplayError::EmptyBuffer`] if no raw video frames are currently buffered.
@@ -159,6 +169,10 @@ impl InstantReplayBuffer {
     }
 
     /// Exports a snapshot clone of the currently buffered compressed JPEG video frames.
+    ///
+    /// # Returns
+    ///
+    /// Ordered vector of [`EncodedReplayFrame`] instances currently in the circular buffer.
     #[must_use]
     pub fn export_encoded_snapshot(&self) -> Vec<EncodedReplayFrame> {
         let queue = self.encoded_frames.lock();
@@ -166,6 +180,10 @@ impl InstantReplayBuffer {
     }
 
     /// Exports a snapshot clone of the currently buffered audio frames.
+    ///
+    /// # Returns
+    ///
+    /// Ordered vector of [`AudioFrame`] instances currently in the circular buffer.
     #[must_use]
     pub fn export_audio_snapshot(&self) -> Vec<AudioFrame> {
         let queue = self.audio_frames.lock();
@@ -173,6 +191,10 @@ impl InstantReplayBuffer {
     }
 
     /// Returns the number of video frames currently buffered.
+    ///
+    /// # Returns
+    ///
+    /// Total count of raw and pre-encoded video frames in the buffer.
     #[must_use]
     pub fn video_count(&self) -> usize {
         let raw_len = self.video_frames.lock().len();
@@ -181,6 +203,10 @@ impl InstantReplayBuffer {
     }
 
     /// Returns the number of audio frames currently buffered.
+    ///
+    /// # Returns
+    ///
+    /// Count of [`AudioFrame`] items in the buffer.
     #[must_use]
     pub fn audio_count(&self) -> usize {
         self.audio_frames.lock().len()

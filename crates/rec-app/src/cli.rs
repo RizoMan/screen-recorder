@@ -28,7 +28,11 @@ impl Default for CliOptions {
 }
 
 impl CliOptions {
-    /// Creates an empty [`CliOptions`].
+    /// Creates an empty [`CliOptions`] with default values.
+    ///
+    /// # Returns
+    ///
+    /// Default [`CliOptions`] with `record: false` and all optional parameters set to `None`.
     #[must_use]
     pub const fn new() -> Self {
         Self {
@@ -45,6 +49,10 @@ impl CliOptions {
     /// # Arguments
     ///
     /// * `args` - Iterable string sequence (excluding program name).
+    ///
+    /// # Returns
+    ///
+    /// Parsed [`CliOptions`] struct.
     #[must_use]
     pub fn parse_from<I, T>(args: I) -> Self
     where
@@ -97,6 +105,10 @@ impl CliOptions {
     }
 
     /// Resolves the intended [`CaptureTarget`] from CLI options.
+    ///
+    /// # Returns
+    ///
+    /// [`CaptureTarget::Area`] if `--area` was specified, otherwise [`CaptureTarget::FullScreen`].
     #[must_use]
     pub fn to_capture_target(&self) -> CaptureTarget {
         if let Some((x, y, width, height)) = self.area {
@@ -109,6 +121,10 @@ impl CliOptions {
     }
 
     /// Applies CLI options into an [`AppConfig`].
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Mutable [`AppConfig`] to update with CLI overrides.
     pub fn apply_to_config(&self, config: &mut AppConfig) {
         if let Some(ref out) = self.output {
             if let Some(parent) = out.parent() {

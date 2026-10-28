@@ -85,7 +85,21 @@ impl Default for AppConfig {
 }
 
 impl AppConfig {
-    /// Creates and sanitizes a default configuration.
+    /// Creates and sanitizes a default [`AppConfig`] instance.
+    ///
+    /// # Returns
+    ///
+    /// Returns a newly initialized [`AppConfig`] with all fields clamped to safe operating ranges.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use rec_core::config::AppConfig;
+    ///
+    /// let config = AppConfig::new();
+    /// assert_eq!(config.fps, 30);
+    /// assert!(config.validate().is_ok());
+    /// ```
     #[must_use]
     pub fn new() -> Self {
         let mut config = Self::default();
@@ -93,7 +107,18 @@ impl AppConfig {
         config
     }
 
-    /// Sanitizes configuration values to ensure they fall within safe operating boundaries.
+    /// Sanitizes configuration values in-place to ensure they fall within safe operating boundaries.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use rec_core::config::AppConfig;
+    ///
+    /// let mut config = AppConfig { fps: 999, quality_crf: 80, ..Default::default() };
+    /// config.sanitize();
+    /// assert_eq!(config.fps, 240);
+    /// assert_eq!(config.quality_crf, 51);
+    /// ```
     pub fn sanitize(&mut self) {
         // Clamp framerate between 15 and 240 FPS
         self.fps = self.fps.clamp(15, 240);
@@ -111,11 +136,24 @@ impl AppConfig {
         self.cursor_halo_radius = self.cursor_halo_radius.clamp(12, 64);
     }
 
-    /// Validates the configuration and returns an error if any invariant is violated.
+    /// Validates the configuration and returns an error if any domain invariant is violated.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` when all parameters satisfy domain invariants.
     ///
     /// # Errors
     ///
-    /// Returns [`CoreError::ConfigValidation`] if constraints are violated.
+    /// Returns [`CoreError::ConfigValidation`] if `fps` is outside `15..=240` or `quality_crf > 51`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use rec_core::config::AppConfig;
+    ///
+    /// let config = AppConfig::new();
+    /// assert!(config.validate().is_ok());
+    /// ```
     pub fn validate(&self) -> Result<(), CoreError> {
         if self.fps < 15 || self.fps > 240 {
             return Err(CoreError::ConfigValidation(format!(
@@ -132,24 +170,54 @@ impl AppConfig {
         Ok(())
     }
 
-    /// Serializes configuration to a JSON formatted string.
+    /// Serializes configuration to a pretty-printed JSON string.
+    ///
+    /// # Returns
+    ///
+    /// Returns a UTF-8 JSON string representation of [`AppConfig`].
     ///
     /// # Errors
     ///
-    /// Returns [`CoreError::Serialization`] on encoding failure.
+    /// Returns [`CoreError::Serialization`] on JSON encoding failure.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use rec_core::config::AppConfig;
+    ///
+    /// let config = AppConfig::new();
+    /// let json = config.to_json().unwrap();
+    /// assert!(json.contains("\"fps\": 30"));
+    /// ```
     pub fn to_json(&self) -> Result<String, CoreError> {
         serde_json::to_string_pretty(self).map_err(|e| CoreError::Serialization(e.to_string()))
     }
 
-    /// Deserializes and sanitizes configuration from a JSON formatted string.
+    /// Deserializes, sanitizes, and validates an [`AppConfig`] from a JSON string.
     ///
     /// # Arguments
     ///
-    /// * `json_str` - The JSON payload to parse.
+    /// * `json_str` - The UTF-8 JSON payload to parse.
+    ///
+    /// # Returns
+    ///
+    /// Returns a sanitized and validated [`AppConfig`] instance.
     ///
     /// # Errors
     ///
-    /// Returns [`CoreError::Serialization`] if the JSON is malformed.
+    /// Returns [`CoreError::Serialization`] if the JSON is malformed or [`CoreError::ConfigValidation`]
+    /// if post-sanitization validation fails.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use rec_core::config::AppConfig;
+    ///
+    /// let original = AppConfig::new();
+    /// let json = original.to_json().unwrap();
+    /// let restored = AppConfig::from_json(&json).unwrap();
+    /// assert_eq!(original, restored);
+    /// ```
     pub fn from_json(json_str: &str) -> Result<Self, CoreError> {
         let mut config: Self =
             serde_json::from_str(json_str).map_err(|e| CoreError::Serialization(e.to_string()))?;
@@ -158,7 +226,22 @@ impl AppConfig {
         Ok(config)
     }
 
-    /// Sets the output directory.
+    /// Updates the destination directory path for recorded media files.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - New target directory path.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use std::path::Path;
+    /// use rec_core::config::AppConfig;
+    ///
+    /// let mut config = AppConfig::new();
+    /// config.set_output_directory("C:/Recordings");
+    /// assert_eq!(config.output_directory, Path::new("C:/Recordings"));
+    /// ```
     pub fn set_output_directory<P: AsRef<Path>>(&mut self, path: P) {
         self.output_directory = path.as_ref().to_path_buf();
     }

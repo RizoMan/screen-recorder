@@ -138,11 +138,15 @@ fn write_synchronized_audio(
 }
 
 impl RecordingPipeline {
-    /// Creates a new inactive `RecordingPipeline` with default components.
+    /// Creates a new inactive [`RecordingPipeline`] with default components.
     ///
     /// # Arguments
     ///
     /// * `config` - Initial application configuration.
+    ///
+    /// # Returns
+    ///
+    /// A newly initialized [`RecordingPipeline`] in [`RecordingState::Idle`].
     #[must_use]
     pub fn new(config: AppConfig) -> Self {
         let replay_duration = Duration::from_secs(config.instant_replay_duration_secs as u64);
@@ -164,16 +168,28 @@ impl RecordingPipeline {
     }
 
     /// Injects the concrete platform video capture backend (DIP).
+    ///
+    /// # Arguments
+    ///
+    /// * `backend` - Boxed trait object implementing [`CaptureBackend`].
     pub fn set_capture_backend(&mut self, backend: Box<dyn CaptureBackend>) {
         self.capture_backend = Some(backend);
     }
 
     /// Injects the concrete platform audio backend (DIP).
+    ///
+    /// # Arguments
+    ///
+    /// * `backend` - Boxed trait object implementing [`AudioBackend`].
     pub fn set_audio_backend(&mut self, backend: Box<dyn AudioBackend>) {
         self.audio_backend = Some(backend);
     }
 
-    /// Updates active application configuration.
+    /// Updates active application configuration and propagates it to the capture backend.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Updated [`AppConfig`] instance.
     pub fn set_config(&mut self, config: AppConfig) {
         if let Some(backend) = self.capture_backend.as_mut() {
             backend.update_config(&config);
@@ -189,10 +205,14 @@ impl RecordingPipeline {
     /// * `target` - Display, window, or custom coordinate area to record.
     /// * `output_path` - File path where recorded video will be saved.
     ///
+    /// # Returns
+    ///
+    /// Returns the destination [`PathBuf`] of the active recording.
+    ///
     /// # Errors
     ///
     /// Returns [`EngineError::PipelineAlreadyRunning`] if recording is already active,
-    /// or backend initialization errors.
+    /// or [`EngineError::Capture`] on backend initialization failure.
     pub fn start(&mut self, target: CaptureTarget, output_path: PathBuf) -> Result<PathBuf, EngineError> {
         let mut state_guard = self.state.lock();
         if !matches!(*state_guard, RecordingState::Idle) {
@@ -678,6 +698,10 @@ impl RecordingPipeline {
     }
 
     /// Returns the current total elapsed recording duration.
+    ///
+    /// # Returns
+    ///
+    /// Elapsed [`Duration`] since recording started (excluding paused intervals), or [`Duration::ZERO`] if idle.
     #[must_use]
     pub fn elapsed(&self) -> Duration {
         let state_guard = self.state.lock();
@@ -689,6 +713,10 @@ impl RecordingPipeline {
     }
 
     /// Checks if recording is active (running or paused).
+    ///
+    /// # Returns
+    ///
+    /// `true` if the pipeline is not in [`RecordingState::Idle`].
     #[must_use]
     pub fn is_active(&self) -> bool {
         let state_guard = self.state.lock();
@@ -697,24 +725,30 @@ impl RecordingPipeline {
 
     /// Checks if recording is currently paused.
     ///
-    /// Returns `true` if in the [`RecordingState::Paused`] state.
+    /// # Returns
+    ///
+    /// `true` if the pipeline is in the [`RecordingState::Paused`] state.
     #[must_use]
-    #[allow(clippy::match_like_matches_macro)]
     pub fn is_paused(&self) -> bool {
         let state_guard = self.state.lock();
-        match *state_guard {
-            RecordingState::Paused { .. } => true,
-            _ => false,
-        }
+        matches!(*state_guard, RecordingState::Paused { .. })
     }
 
-    /// Returns live peak levels `(left, right)` for audio meters.
+    /// Returns live peak levels `(left, right)` for audio VU meters.
+    ///
+    /// # Returns
+    ///
+    /// A `(f32, f32)` tuple of normalized peak amplitudes in `0.0..=1.0`.
     #[must_use]
     pub fn live_audio_peaks(&self) -> (f32, f32) {
         *self.latest_audio_peaks.lock()
     }
 
-    /// Returns a reference to the circular instant replay buffer.
+    /// Returns a shared reference to the circular instant replay buffer.
+    ///
+    /// # Returns
+    ///
+    /// Reference to the internal [`Arc<InstantReplayBuffer>`].
     #[must_use]
     pub fn replay_buffer(&self) -> &Arc<InstantReplayBuffer> {
         &self.replay_buffer

@@ -5,6 +5,18 @@
 use std::time::Duration;
 use eframe::egui::{self, Color32, Vec2};
 use rec_core::i18n::{text, I18nKey, Language};
+use crate::theme::render_vu_meter;
+
+/// Strongly-typed user action triggered from the floating recording HUD.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HudAction {
+    /// Pause the active recording session.
+    Pause,
+    /// Resume a paused recording session.
+    Resume,
+    /// Stop and finalize the active recording session.
+    Stop,
+}
 
 /// Live state for the compact floating recording HUD.
 #[derive(Debug, Clone, PartialEq)]
@@ -33,7 +45,15 @@ impl Default for FloatingHudState {
     }
 }
 
-/// Formats a duration into standard `HH:MM:SS` display format.
+/// Formats a [`Duration`] into standard `MM:SS` or `HH:MM:SS` display format.
+///
+/// # Arguments
+///
+/// * `duration` - Elapsed time duration to format.
+///
+/// # Returns
+///
+/// Formatted time string (`"MM:SS"` when under 1 hour, `"HH:MM:SS"` otherwise).
 #[must_use]
 pub fn format_duration(duration: Duration) -> String {
     let total_secs = duration.as_secs();
@@ -48,26 +68,26 @@ pub fn format_duration(duration: Duration) -> String {
     }
 }
 
-/// Renders the floating HUD widget within an egui UI context.
+/// Renders the floating HUD widget within an `egui::Ui` context.
 ///
 /// # Arguments
 ///
-/// * `ui` - Active egui context.
-/// * `state` - Current HUD metrics state.
-/// * `lang` - Current display language.
+/// * `ui` - Active `egui::Ui` region.
+/// * `state` - Current [`FloatingHudState`] metrics.
+/// * `lang` - Current display [`Language`].
 ///
 /// # Returns
 ///
-/// An optional action triggered by user button clicks (`"pause"`, `"resume"`, `"stop"`).
+/// An optional [`HudAction`] triggered by user button clicks.
 pub fn render_floating_hud(
     ui: &mut egui::Ui,
     state: &FloatingHudState,
     lang: Language,
-) -> Option<&'static str> {
+) -> Option<HudAction> {
     let mut action = None;
 
     ui.horizontal(|ui| {
-        // Blinking recording dot or paused icon
+        // Blinking recording dot or paused indicator
         let dot_color = if state.is_paused {
             Color32::from_rgb(234, 179, 8) // Amber/Yellow
         } else {
@@ -83,40 +103,24 @@ pub fn render_floating_hud(
 
         ui.separator();
 
-        // Audio VU Meter bar
-        let vu_width = 40.0;
-        let vu_height = 8.0;
-        let (vu_rect, _) = ui.allocate_exact_size(Vec2::new(vu_width, vu_height), egui::Sense::hover());
-        ui.painter().rect_filled(vu_rect, 2.0, Color32::from_rgb(30, 41, 59));
-
+        // Reuse centralized DRY VU meter widget from theme module
         let peak = state.audio_peak_l.max(state.audio_peak_r).clamp(0.0, 1.0);
-        let filled_rect = egui::Rect::from_min_size(
-            vu_rect.min,
-            Vec2::new(vu_width * peak, vu_height),
-        );
-        let meter_color = if peak > 0.85 {
-            Color32::from_rgb(239, 68, 68) // Red clip
-        } else if peak > 0.6 {
-            Color32::from_rgb(234, 179, 8) // Yellow
-        } else {
-            Color32::from_rgb(34, 197, 94) // Green
-        };
-        ui.painter().rect_filled(filled_rect, 2.0, meter_color);
+        render_vu_meter(ui, peak, 40.0, 8.0);
 
         ui.separator();
 
         // Pause / Resume button
         if state.is_paused {
             if ui.button(text(I18nKey::ResumeRecording, lang)).clicked() {
-                action = Some("resume");
+                action = Some(HudAction::Resume);
             }
         } else if ui.button(text(I18nKey::PauseRecording, lang)).clicked() {
-            action = Some("pause");
+            action = Some(HudAction::Pause);
         }
 
         // Stop button
         if ui.button(text(I18nKey::StopRecording, lang)).clicked() {
-            action = Some("stop");
+            action = Some(HudAction::Stop);
         }
     });
 

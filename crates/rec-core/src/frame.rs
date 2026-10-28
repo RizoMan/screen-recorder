@@ -11,25 +11,49 @@ use crate::pixel_format::PixelFormat;
 pub struct Pts(pub u64);
 
 impl Pts {
-    /// Creates a new `Pts` from raw nanoseconds.
+    /// Creates a new [`Pts`] from raw nanoseconds.
+    ///
+    /// # Arguments
+    ///
+    /// * `nanos` - Monotonic timestamp in nanoseconds.
+    ///
+    /// # Returns
+    ///
+    /// A new [`Pts`] instance wrapping `nanos`.
     #[must_use]
     pub const fn from_nanos(nanos: u64) -> Self {
         Self(nanos)
     }
 
-    /// Creates a new `Pts` from a [`Duration`].
+    /// Creates a new [`Pts`] from a standard [`Duration`].
+    ///
+    /// # Arguments
+    ///
+    /// * `duration` - Elapsed time duration.
+    ///
+    /// # Returns
+    ///
+    /// A [`Pts`] representing the duration in nanoseconds.
     #[must_use]
     pub const fn from_duration(duration: Duration) -> Self {
         Self(duration.as_nanos() as u64)
     }
 
-    /// Converts the `Pts` into a standard [`Duration`].
+    /// Converts the [`Pts`] into a standard [`Duration`].
+    ///
+    /// # Returns
+    ///
+    /// A [`Duration`] corresponding to this timestamp's nanoseconds.
     #[must_use]
     pub const fn as_duration(&self) -> Duration {
         Duration::from_nanos(self.0)
     }
 
     /// Returns the raw timestamp value in nanoseconds.
+    ///
+    /// # Returns
+    ///
+    /// Nanosecond count as `u64`.
     #[must_use]
     pub const fn as_nanos(&self) -> u64 {
         self.0

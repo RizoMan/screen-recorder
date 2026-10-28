@@ -101,24 +101,40 @@ impl<T> LockFreeRingBuffer<T> {
     }
 
     /// Returns the maximum capacity of this buffer.
+    ///
+    /// # Returns
+    ///
+    /// Maximum number of elements the ring buffer can store before overflowing.
     #[must_use]
     pub fn capacity(&self) -> usize {
         self.capacity
     }
 
     /// Returns the current number of items stored in the buffer.
+    ///
+    /// # Returns
+    ///
+    /// Number of queued items currently in the buffer.
     #[must_use]
     pub fn len(&self) -> usize {
         self.inner.lock().len()
     }
 
-    /// Checks if the buffer is empty.
+    /// Checks if the buffer contains zero elements.
+    ///
+    /// # Returns
+    ///
+    /// `true` if no elements are queued, `false` otherwise.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.inner.lock().is_empty()
     }
 
-    /// Checks if the buffer has reached maximum capacity.
+    /// Checks if the buffer has reached its maximum capacity.
+    ///
+    /// # Returns
+    ///
+    /// `true` if `self.len() >= self.capacity()`, `false` otherwise.
     #[must_use]
     pub fn is_full(&self) -> bool {
         self.inner.lock().len() >= self.capacity
