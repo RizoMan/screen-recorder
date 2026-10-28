@@ -728,6 +728,7 @@ impl Drop for RecordingPipeline {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use rec_core::frame::Pts;

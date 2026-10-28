@@ -52,9 +52,10 @@ if (-not $IsccExe) {
     Write-Error "ISCC.exe (Inno Setup Compiler) was not found. Please install Inno Setup 6."
 }
 
-# 2. Handle version in Cargo.toml and ScreenRecorderPro.iss
+# 2. Handle version in Cargo.toml, ScreenRecorderPro.iss, and packaging/windows/installer.iss
 $CargoTomlPath = Join-Path $WorkspaceRoot "Cargo.toml"
 $IssPath = Join-Path $WorkspaceRoot "installer\ScreenRecorderPro.iss"
+$PackagingIssPath = Join-Path $WorkspaceRoot "packaging\windows\installer.iss"
 
 if ($Version) {
     Write-Host "[1/3] Updating version to v$Version..." -ForegroundColor Yellow
@@ -66,6 +67,12 @@ if ($Version) {
     $issContent = Get-Content $IssPath -Raw
     $issContent = $issContent -replace '#define MyAppVersion\s*"[^"]+"', "#define MyAppVersion `"$Version`""
     Set-Content -Path $IssPath -Value $issContent -NoNewline
+
+    if (Test-Path $PackagingIssPath) {
+        $pkgIss = Get-Content $PackagingIssPath -Raw
+        $pkgIss = $pkgIss -replace '#define MyAppVersion\s*"[^"]+"', "#define MyAppVersion `"$Version`""
+        Set-Content -Path $PackagingIssPath -Value $pkgIss -NoNewline
+    }
 } else {
     $cargoContent = Get-Content $CargoTomlPath -Raw
     if ($cargoContent -match '(?ms)\[workspace\.package\].*?version\s*=\s*"([^"]+)"') {
@@ -79,6 +86,12 @@ if ($Version) {
     $issContent = Get-Content $IssPath -Raw
     $issContent = $issContent -replace '#define MyAppVersion\s*"[^"]+"', "#define MyAppVersion `"$Version`""
     Set-Content -Path $IssPath -Value $issContent -NoNewline
+
+    if (Test-Path $PackagingIssPath) {
+        $pkgIss = Get-Content $PackagingIssPath -Raw
+        $pkgIss = $pkgIss -replace '#define MyAppVersion\s*"[^"]+"', "#define MyAppVersion `"$Version`""
+        Set-Content -Path $PackagingIssPath -Value $pkgIss -NoNewline
+    }
 }
 
 # 3. Stop running instance of rec-app to prevent file locks

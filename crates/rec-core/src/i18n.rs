@@ -252,6 +252,20 @@ pub enum I18nKey {
     CursorColorBlue,
     /// Color preset label: Neon Emerald.
     CursorColorNeon,
+    /// Badge label for screenshot snapshot items.
+    SnapshotBadge,
+    /// Button label to close the settings modal.
+    BtnCloseModal,
+    /// Informational notice when MP4 container is selected.
+    Mp4RoadmapNotice,
+    /// Hotkey description for starting/stopping recording.
+    HotkeyStartStopLabel,
+    /// Hotkey description for taking a screenshot.
+    HotkeySnapshotLabel,
+    /// Hotkey description for saving instant replay.
+    HotkeyReplayLabel,
+    /// Hotkey description for pausing/resuming recording.
+    HotkeyPauseResumeLabel,
 }
 
 impl I18nKey {
@@ -365,6 +379,13 @@ impl I18nKey {
             I18nKey::CursorColorYellow,
             I18nKey::CursorColorBlue,
             I18nKey::CursorColorNeon,
+            I18nKey::SnapshotBadge,
+            I18nKey::BtnCloseModal,
+            I18nKey::Mp4RoadmapNotice,
+            I18nKey::HotkeyStartStopLabel,
+            I18nKey::HotkeySnapshotLabel,
+            I18nKey::HotkeyReplayLabel,
+            I18nKey::HotkeyPauseResumeLabel,
         ]
     }
 }
@@ -500,6 +521,13 @@ pub fn text(key: I18nKey, lang: Language) -> &'static str {
             I18nKey::CursorColorYellow => "Golden Yellow",
             I18nKey::CursorColorBlue => "Electric Blue",
             I18nKey::CursorColorNeon => "Neon Emerald",
+            I18nKey::SnapshotBadge => "Snapshot",
+            I18nKey::BtnCloseModal => "✖ Close",
+            I18nKey::Mp4RoadmapNotice => "ℹ Hardware-accelerated MP4 (NVENC/QSV/AMF) is scheduled for Phase 2 (v0.3.0). Recording in OpenDML AVI.",
+            I18nKey::HotkeyStartStopLabel => "Start / Stop Recording:",
+            I18nKey::HotkeySnapshotLabel => "Take Screenshot / Snapshot:",
+            I18nKey::HotkeyReplayLabel => "Save Instant Replay:",
+            I18nKey::HotkeyPauseResumeLabel => "Pause / Resume Recording:",
         },
         Language::Spanish => match key {
             I18nKey::AppTitle => "Screen Recorder Pro",
@@ -536,12 +564,12 @@ pub fn text(key: I18nKey, lang: Language) -> &'static str {
             I18nKey::TrayTooltip => "Screen Recorder Pro",
             I18nKey::TrayMinimizeToTray => "Minimizar a la Bandeja",
             I18nKey::ProBadge => "PRO",
-            I18nKey::EnginePill => "Core v2.4 (Sub-5ms)",
-            I18nKey::HwReadyPill => "Hardware Ready (Sub-3ms)",
+            I18nKey::EnginePill => "Núcleo v2.4 (Sub-5ms)",
+            I18nKey::HwReadyPill => "Hardware Listo (Sub-3ms)",
             I18nKey::ModeFullScreen => "Monitor Completo",
             I18nKey::ModeWindow => "Ventana",
             I18nKey::ModeFreeRegion => "Región Libre",
-            I18nKey::ModePresets => "Presets",
+            I18nKey::ModePresets => "Preajustes",
             I18nKey::PrimaryDisplayLabel => "PANTALLA PRIMARIA",
             I18nKey::CaptureBackendLabel => "Backend de Grabación:",
             I18nKey::SystemAudioLabel => "Audio del Sistema",
@@ -559,11 +587,11 @@ pub fn text(key: I18nKey, lang: Language) -> &'static str {
             I18nKey::BtnShowInFolder => "Mostrar",
             I18nKey::EngineReady => "Motor de Captura Listo",
             I18nKey::SettingsEncoderTitle => "Configuración / Ajustes del Encoder",
-            I18nKey::SettingsTabVideoEncoder => "Video & Encoder",
-            I18nKey::SettingsTabAudioChannels => "Audio & Canales",
+            I18nKey::SettingsTabVideoEncoder => "Video y Codificador",
+            I18nKey::SettingsTabAudioChannels => "Audio y Canales",
             I18nKey::SettingsTabOutputFormat => "Salida y Formato",
             I18nKey::SettingsTabHotkeys => "Atajos de Teclado",
-            I18nKey::SettingsTabPerfBuffer => "Rendimiento & Buffer",
+            I18nKey::SettingsTabPerfBuffer => "Rendimiento y Búfer",
             I18nKey::HwEncoderBackendSection => "Backend y Codificador por Hardware",
             I18nKey::RecommendedBadge => "RECOMENDADO",
             I18nKey::DetectedGpuLabel => "GPU Detectada:",
@@ -572,19 +600,19 @@ pub fn text(key: I18nKey, lang: Language) -> &'static str {
             I18nKey::TargetBitrateLabel => "Tasa de Bits Objetivo (Target Bitrate)",
             I18nKey::NvencPresetLabel => "Preset de Codificación NVENC",
             I18nKey::ProfileLabel => "Perfil (Profile)",
-            I18nKey::KeyframesLabel => "Keyframes (GOP)",
+            I18nKey::KeyframesLabel => "Fotogramas Clave (GOP)",
             I18nKey::LatencyMetric => "LATENCIA MOTOR:",
             I18nKey::DroppedFramesMetric => "FRAMES PERDIDOS:",
-            I18nKey::VramMetric => "VRAM USAGE:",
+            I18nKey::VramMetric => "USO DE VRAM:",
             I18nKey::BtnResetDefaults => "Restablecer Valores por Defecto",
             I18nKey::BtnCancel => "Cancelar",
             I18nKey::BtnSave => "Guardar Cambios",
-            I18nKey::NavDashboard => "General",
+            I18nKey::NavDashboard => "Panel",
             I18nKey::NavSettings => "⚙ Ajustes",
             I18nKey::PrimaryBadge => "★ Principal",
             I18nKey::UiScaleLabel => "Escala de Fuente e Interfaz",
             I18nKey::UiScaleSmall => "Compacto (85%)",
-            I18nKey::UiScaleNormal => "Normal (100%)",
+            I18nKey::UiScaleNormal => "Estándar (100%)",
             I18nKey::UiScaleLarge => "Grande (115%)",
             I18nKey::UiScaleExtraLarge => "Extra Grande (130%)",
             I18nKey::BtnCopyPath => "Copiar Ruta",
@@ -608,6 +636,13 @@ pub fn text(key: I18nKey, lang: Language) -> &'static str {
             I18nKey::CursorColorYellow => "Amarillo Dorado",
             I18nKey::CursorColorBlue => "Azul Eléctrico",
             I18nKey::CursorColorNeon => "Verde Neón",
+            I18nKey::SnapshotBadge => "Captura",
+            I18nKey::BtnCloseModal => "✖ Cerrar",
+            I18nKey::Mp4RoadmapNotice => "ℹ MP4 con aceleración hardware (NVENC/QSV/AMF) programado para Fase 2 (v0.3.0). Grabando en AVI OpenDML.",
+            I18nKey::HotkeyStartStopLabel => "Iniciar / Detener Grabación:",
+            I18nKey::HotkeySnapshotLabel => "Captura de Imagen / Snapshot:",
+            I18nKey::HotkeyReplayLabel => "Guardar Repetición Instantánea:",
+            I18nKey::HotkeyPauseResumeLabel => "Pausar / Reanudar Grabación:",
         },
     }
 }
@@ -639,6 +674,25 @@ mod tests {
                 "Spanish translation for {:?} must not be empty",
                 key
             );
+
+            // Enforce RULE-I18N-001 Section 3: Spanish must not be an accidental copy-paste of English
+            // unless it is an identical brand/technical identifier.
+            let is_identical_brand_term = matches!(
+                key,
+                I18nKey::AppTitle
+                    | I18nKey::TrayTooltip
+                    | I18nKey::ProBadge
+                    | I18nKey::GeneralTab
+                    | I18nKey::VideoTab
+                    | I18nKey::AudioTab
+            );
+            if !is_identical_brand_term {
+                assert_ne!(
+                    en, es,
+                    "Spanish translation for {:?} is identical to English ('{}')",
+                    key, en
+                );
+            }
         }
     }
 

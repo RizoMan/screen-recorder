@@ -511,13 +511,13 @@ impl RecorderGuiApp {
             render_badge(ui, text(I18nKey::ProBadge, lang), Color32::from_rgb(0x1E, 0x3A, 0x8A), COLOR_PRIMARY_HOVER);
             
             let (status_text, status_bg, status_fg) = if self.pipeline.is_active() {
-                ("● REC", Color32::from_rgb(0x45, 0x1A, 0x1A), COLOR_SECONDARY)
+                (format!("● {}", text(I18nKey::StatusRecording, lang)), Color32::from_rgb(0x45, 0x1A, 0x1A), COLOR_SECONDARY)
             } else if self.pipeline.is_paused() {
-                ("● PAUSA", Color32::from_rgb(0x45, 0x30, 0x10), Color32::from_rgb(0xF5, 0x9E, 0x0B))
+                (format!("● {}", text(I18nKey::StatusPaused, lang)), Color32::from_rgb(0x45, 0x30, 0x10), Color32::from_rgb(0xF5, 0x9E, 0x0B))
             } else {
-                ("● Listo", Color32::from_rgb(0x06, 0x4E, 0x3B), COLOR_TERTIARY)
+                (format!("● {}", text(I18nKey::StatusIdle, lang)), Color32::from_rgb(0x06, 0x4E, 0x3B), COLOR_TERTIARY)
             };
-            render_badge(ui, status_text, status_bg, status_fg);
+            render_badge(ui, &status_text, status_bg, status_fg);
 
             render_badge(ui, "Rust Core v2.4 (Sub-5ms)", Color32::from_rgb(0x2A, 0x18, 0x10), COLOR_RUST_ORANGE);
 
@@ -834,7 +834,7 @@ impl RecorderGuiApp {
         if self.container_format == ContainerFormat::Mp4 {
             ui.horizontal(|ui| {
                 ui.label(
-                    RichText::new("ℹ MP4 con aceleración hardware (NVENC/QSV/AMF) programado para Fase 2 (v0.3.0). Grabando en AVI OpenDML.")
+                    RichText::new(text(I18nKey::Mp4RoadmapNotice, lang))
                         .size(11.0)
                         .color(Color32::from_rgb(0x38, 0xBD, 0xF8)),
                 );
@@ -930,7 +930,7 @@ impl RecorderGuiApp {
                             let file_name = meta.path.file_name().unwrap_or_default().to_string_lossy();
                             ui.label(RichText::new(file_name).strong().color(TEXT_HEADLINE));
                             let badge_text = if is_snapshot {
-                                if lang == Language::Spanish { "Captura" } else { "Snapshot" }
+                                text(I18nKey::SnapshotBadge, lang)
                             } else {
                                 text(I18nKey::RecentRecording, lang)
                             };
@@ -1036,7 +1036,7 @@ impl RecorderGuiApp {
             render_badge(ui, text(I18nKey::HwReadyPill, lang), Color32::from_rgb(0x06, 0x4E, 0x3B), COLOR_TERTIARY);
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("✖ Cerrar").clicked() {
+                if ui.button(text(I18nKey::BtnCloseModal, lang)).clicked() {
                     self.active_tab = AppTab::Dashboard;
                 }
             });
@@ -1477,10 +1477,10 @@ impl RecorderGuiApp {
 
         card_frame().show(ui, |ui| {
             let hotkeys = [
-                ("Iniciar / Detener Grabación:", "F9"),
-                ("Captura de Imagen / Snapshot:", "F10"),
-                ("Guardar Repetición Instantánea:", "F11"),
-                ("Pausar / Reanudar Grabación:", "F8"),
+                (text(I18nKey::HotkeyStartStopLabel, lang), "F9"),
+                (text(I18nKey::HotkeySnapshotLabel, lang), "F10"),
+                (text(I18nKey::HotkeyReplayLabel, lang), "F11"),
+                (text(I18nKey::HotkeyPauseResumeLabel, lang), "F8"),
             ];
 
             for (desc, key) in hotkeys {
