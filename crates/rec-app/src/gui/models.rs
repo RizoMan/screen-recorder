@@ -122,7 +122,10 @@ impl RecentRecordingMeta {
     /// `true` when `self.kind` is [`RecentMediaKind::Snapshot`].
     #[must_use]
     pub const fn is_snapshot(&self) -> bool {
-        matches!(self.kind, RecentMediaKind::Snapshot)
+        match self.kind {
+            RecentMediaKind::Snapshot => true,
+            RecentMediaKind::Video { .. } | RecentMediaKind::AnimatedGif { .. } => false,
+        }
     }
 
     /// Returns `true` if this media item is a recorded `.avi` video clip that can be exported to GIF.
@@ -132,7 +135,10 @@ impl RecentRecordingMeta {
     /// `true` when `self.kind` is [`RecentMediaKind::Video`].
     #[must_use]
     pub const fn is_video(&self) -> bool {
-        matches!(self.kind, RecentMediaKind::Video { .. })
+        match self.kind {
+            RecentMediaKind::Video { .. } => true,
+            RecentMediaKind::Snapshot | RecentMediaKind::AnimatedGif { .. } => false,
+        }
     }
 
     /// Returns `true` if this media item is an exported animated `.gif`.
@@ -142,7 +148,10 @@ impl RecentRecordingMeta {
     /// `true` when `self.kind` is [`RecentMediaKind::AnimatedGif`].
     #[must_use]
     pub const fn is_gif(&self) -> bool {
-        matches!(self.kind, RecentMediaKind::AnimatedGif { .. })
+        match self.kind {
+            RecentMediaKind::AnimatedGif { .. } => true,
+            RecentMediaKind::Video { .. } | RecentMediaKind::Snapshot => false,
+        }
     }
 
     /// Returns the human-readable duration or type label for display in the UI.
@@ -176,18 +185,21 @@ impl RecentRecordingMeta {
 /// Formatted string such as `"\\.\DISPLAY1 [1920x1080] ★ Primary (sRGB)"`.
 #[must_use]
 pub fn format_monitor_label(monitor: &MonitorInfo, lang: Language) -> String {
-    let primary_tag = if monitor.is_primary {
-        format!(" {}", text(I18nKey::PrimaryBadge, lang))
-    } else {
-        String::new()
-    };
-    format!(
-        "\\\\.\\DISPLAY{} [{}x{}]{} (sRGB)",
+    use std::fmt::Write;
+    let mut out = String::with_capacity(48);
+    let _ = write!(
+        &mut out,
+        "\\\\.\\DISPLAY{} [{}x{}]",
         monitor.index + 1,
         monitor.width,
-        monitor.height,
-        primary_tag
-    )
+        monitor.height
+    );
+    if monitor.is_primary {
+        out.push(' ');
+        out.push_str(text(I18nKey::PrimaryBadge, lang));
+    }
+    out.push_str(" (sRGB)");
+    out
 }
 
 /// Returns the localized fallback display label when no monitor descriptor is selected (`[REQ-GUI-001.1]`).

@@ -4,15 +4,15 @@
 //! Conforms to `[SPEC-FEAT-GIF-001]`, `[CONTRACT-GIF-001]`, `RULE-ARCH-001` (SOLID, DRY, KISS),
 //! `RULE-SAFE-001` (`#![forbid(unsafe_code)]`, RAII), and `RULE-DOC-001`.
 
-use std::fs::File;
-use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
-use std::path::{Path, PathBuf};
-use image::imageops::{resize, FilterType};
-use image::RgbImage;
-use serde::{Deserialize, Serialize};
 use crate::errors::CoreError;
 use crate::frame::VideoFrame;
 use crate::pixel_format::PixelFormat;
+use image::imageops::{resize, FilterType};
+use image::RgbImage;
+use serde::{Deserialize, Serialize};
+use std::fs::File;
+use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
+use std::path::{Path, PathBuf};
 
 /// Resolution scaling preset for animated GIF export (`[REQ-GIF-001.3]`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -387,9 +387,7 @@ fn lookup_nearest_color(
     num_colors: usize,
     lut: &mut [i16],
 ) -> u8 {
-    let cell = ((usize::from(r >> 3)) << 10)
-        | ((usize::from(g >> 3)) << 5)
-        | usize::from(b >> 3);
+    let cell = ((usize::from(r >> 3)) << 10) | ((usize::from(g >> 3)) << 5) | usize::from(b >> 3);
     let cached = lut[cell];
     if cached >= 0 {
         return cached as u8;
@@ -631,8 +629,8 @@ impl GifWriter {
         // 4. NETSCAPE2.0 Infinite Loop Application Extension
         if self.loop_infinite {
             const NETSCAPE_LOOP: [u8; 19] = [
-                0x21, 0xFF, 0x0B, b'N', b'E', b'T', b'S', b'C', b'A', b'P', b'E', b'2', b'.',
-                b'0', 0x03, 0x01, 0x00, 0x00, 0x00,
+                0x21, 0xFF, 0x0B, b'N', b'E', b'T', b'S', b'C', b'A', b'P', b'E', b'2', b'.', b'0',
+                0x03, 0x01, 0x00, 0x00, 0x00,
             ];
             self.writer
                 .write_all(&NETSCAPE_LOOP)
@@ -769,8 +767,7 @@ impl GifWriter {
 
         if self.frame_count == 0 {
             // Frame 0 (Keyframe): build the Global Color Table (255 adaptive colors + transparent 255)
-            let (pal, num_colors) =
-                build_median_cut_palette(rgb, None, &mut self.global_lut_cache);
+            let (pal, num_colors) = build_median_cut_palette(rgb, None, &mut self.global_lut_cache);
             self.global_palette = pal;
             self.global_num_colors = num_colors;
             self.canvas_src_rgb.copy_from_slice(&rgb[..pixel_count * 3]);
@@ -976,14 +973,7 @@ impl GifWriter {
                             {
                                 prev_idx
                             } else {
-                                lookup_nearest_color(
-                                    r,
-                                    g,
-                                    b,
-                                    pal,
-                                    num_c,
-                                    &mut self.local_lut_cache,
-                                )
+                                lookup_nearest_color(r, g, b, pal, num_c, &mut self.local_lut_cache)
                             }
                         } else {
                             lookup_nearest_color(r, g, b, pal, num_c, &mut self.local_lut_cache)
@@ -1216,7 +1206,8 @@ pub fn export_avi_to_gif<P1: AsRef<Path>, P2: AsRef<Path>>(
         }
 
         let tag = &chunk_hdr[0..4];
-        let size = u32::from_le_bytes([chunk_hdr[4], chunk_hdr[5], chunk_hdr[6], chunk_hdr[7]]) as u64;
+        let size =
+            u32::from_le_bytes([chunk_hdr[4], chunk_hdr[5], chunk_hdr[6], chunk_hdr[7]]) as u64;
 
         // Container envelopes ('RIFF' or 'LIST') have a 4-byte sub-type and contain nested chunks
         if tag == b"RIFF" || tag == b"LIST" {
@@ -1331,9 +1322,12 @@ mod tests {
                 chunk[2] = ((idx * 3) & 0xFF) as u8;
                 chunk[3] = 255;
             }
-            let frame =
-                VideoFrame::new(desc.clone(), Pts::from_nanos(u64::from(i) * 33_333_333), pixels)
-                    .unwrap();
+            let frame = VideoFrame::new(
+                desc.clone(),
+                Pts::from_nanos(u64::from(i) * 33_333_333),
+                pixels,
+            )
+            .unwrap();
             avi.write_frame(&frame).unwrap();
         }
         avi.finalize().unwrap();
@@ -1359,7 +1353,10 @@ mod tests {
     fn test_gif_scale_dimensions() {
         assert_eq!(GifScale::Scale50.scaled_dimensions(1920, 1080), (960, 540));
         assert_eq!(GifScale::Scale75.scaled_dimensions(1920, 1080), (1440, 810));
-        assert_eq!(GifScale::Scale100.scaled_dimensions(1920, 1080), (1920, 1080));
+        assert_eq!(
+            GifScale::Scale100.scaled_dimensions(1920, 1080),
+            (1920, 1080)
+        );
         assert_eq!(GifScale::Scale50.percent(), 50);
         assert_eq!(GifScale::Scale75.percent(), 75);
         assert_eq!(GifScale::Scale100.percent(), 100);
