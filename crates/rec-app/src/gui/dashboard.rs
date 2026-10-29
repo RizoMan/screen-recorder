@@ -7,7 +7,9 @@ use eframe::egui::{self, Color32, CornerRadius, RichText, Stroke, Vec2};
 use rec_core::cursor_effects::CursorHighlightColor;
 use rec_core::i18n::{text, I18nKey, Language};
 
-use crate::gui::models::{format_monitor_label, AppTab, CaptureMode, ContainerFormat};
+use crate::gui::models::{
+    default_monitor_label, format_monitor_label, AppTab, CaptureMode, ContainerFormat,
+};
 use crate::gui::RecorderGuiApp;
 use crate::theme::{
     card_frame, elevated_frame, render_badge, render_vu_meter, BG_CARD, BG_ELEVATED, BORDER_SUBTLE,
@@ -303,12 +305,7 @@ impl RecorderGuiApp {
                         .monitors
                         .get(self.selected_monitor_idx)
                         .map(|m| format_monitor_label(m, lang))
-                        .unwrap_or_else(|| {
-                            format!(
-                                "\\\\.\\DISPLAY1 [1920x1080] {} (sRGB)",
-                                text(I18nKey::PrimaryBadge, lang)
-                            )
-                        });
+                        .unwrap_or_else(|| default_monitor_label(lang));
 
                     egui::ComboBox::from_id_salt("display_selector")
                         .selected_text(RichText::new(current_text).size(13.0).color(TEXT_HEADLINE))

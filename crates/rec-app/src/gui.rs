@@ -28,8 +28,8 @@ use crate::hud::{render_floating_hud, FloatingHudState, HudAction};
 use crate::theme::configure_obsidian_theme;
 
 pub use self::models::{
-    AppTab, CaptureMode, ContainerFormat, EncoderChoice, RateControlMode, RecentMediaKind,
-    RecentRecordingMeta, SettingsCategory,
+    default_monitor_label, format_file_size, AppTab, CaptureMode, ContainerFormat, EncoderChoice,
+    RateControlMode, RecentMediaKind, RecentRecordingMeta, SettingsCategory,
 };
 
 /// Native desktop recorder application controller conforming to `[CONTRACT-GUI-001]`.
@@ -227,11 +227,8 @@ impl RecorderGuiApp {
         let secs = elapsed_secs % 60;
         let duration_str = format!("{:02}:{:02} min", mins, secs);
 
-        let size_mb = path
-            .metadata()
-            .map(|m| m.len() as f64 / 1_048_576.0)
-            .unwrap_or(0.0);
-        let size_str = format!("{:.1} MB", size_mb);
+        let bytes = path.metadata().map(|m| m.len()).unwrap_or(0);
+        let size_str = format_file_size(bytes);
 
         self.last_recording = Some(RecentRecordingMeta {
             path,
@@ -262,11 +259,7 @@ impl RecorderGuiApp {
         match export_avi_to_gif(&avi_path, &gif_path, opts) {
             Ok(saved_path) => {
                 let bytes = saved_path.metadata().map(|m| m.len()).unwrap_or(0);
-                let size_str = if bytes >= 1_048_576 {
-                    format!("{:.1} MB", bytes as f64 / 1_048_576.0)
-                } else {
-                    format!("{:.1} KB", bytes as f64 / 1024.0)
-                };
+                let size_str = format_file_size(bytes);
                 let spec_str = format!("{} FPS • {}%", opts.fps, opts.scale.percent());
                 self.last_recording = Some(RecentRecordingMeta {
                     path: saved_path,
@@ -295,11 +288,8 @@ impl RecorderGuiApp {
                     let out_path = self.config.output_directory.join(&file_name);
                     match frame.save_as_png(&out_path) {
                         Ok(()) => {
-                            let size_kb = out_path
-                                .metadata()
-                                .map(|m| m.len() as f64 / 1024.0)
-                                .unwrap_or(0.0);
-                            let size_str = format!("{:.1} KB", size_kb);
+                            let bytes = out_path.metadata().map(|m| m.len()).unwrap_or(0);
+                            let size_str = format_file_size(bytes);
                             self.last_recording = Some(RecentRecordingMeta {
                                 path: out_path,
                                 kind: RecentMediaKind::Snapshot,

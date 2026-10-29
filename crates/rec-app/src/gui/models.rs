@@ -189,3 +189,41 @@ pub fn format_monitor_label(monitor: &MonitorInfo, lang: Language) -> String {
         primary_tag
     )
 }
+
+/// Returns the localized fallback display label when no monitor descriptor is selected (`[REQ-GUI-001.1]`).
+///
+/// # Arguments
+///
+/// * `lang` - Current UI [`Language`] for localizing the primary badge.
+///
+/// # Returns
+///
+/// Formatted fallback display string.
+#[must_use]
+pub fn default_monitor_label(lang: Language) -> String {
+    let mut s = String::from("\\\\.\\DISPLAY1 [1920x1080] ");
+    s.push_str(text(I18nKey::PrimaryBadge, lang));
+    s.push_str(" (sRGB)");
+    s
+}
+
+/// Formats a byte count into a human-readable `KB` or `MB` string (DRY helper).
+///
+/// # Arguments
+///
+/// * `bytes` - File size in bytes.
+///
+/// # Returns
+///
+/// Human-readable file size string such as `"1.4 MB"` or `"240.0 KB"`.
+#[must_use]
+pub fn format_file_size(bytes: u64) -> String {
+    use std::fmt::Write;
+    let mut out = String::with_capacity(16);
+    if bytes >= 1_048_576 {
+        let _ = write!(&mut out, "{:.1} MB", bytes as f64 / 1_048_576.0);
+    } else {
+        let _ = write!(&mut out, "{:.1} KB", bytes as f64 / 1024.0);
+    }
+    out
+}
