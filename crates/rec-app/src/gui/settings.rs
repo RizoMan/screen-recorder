@@ -7,6 +7,7 @@
 use eframe::egui::{self, Color32, CornerRadius, RichText, Stroke, Vec2};
 use rec_core::config::AppConfig;
 use rec_core::cursor_effects::CursorHighlightColor;
+use rec_core::gif_exporter::GifScale;
 use rec_core::i18n::{text, I18nKey, Language};
 
 use crate::gui::models::{AppTab, EncoderChoice, RateControlMode, SettingsCategory};
@@ -645,6 +646,59 @@ impl RecorderGuiApp {
                         self.config.font_scale_percent = val;
                     }
                 }
+            });
+        });
+
+        ui.add_space(10.0);
+
+        // Animated GIF HD Export Configuration Card ([SPEC-FEAT-GIF-001])
+        card_frame().show(ui, |ui| {
+            ui.label(
+                RichText::new(format!("🎞 {}", text(I18nKey::GifExportSectionTitle, lang)))
+                    .strong()
+                    .color(TEXT_HEADLINE),
+            );
+            ui.add_space(6.0);
+
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(text(I18nKey::GifScaleLabel, lang)).color(TEXT_BODY));
+                let scales = [
+                    (GifScale::Scale50, "50% (Compact)"),
+                    (GifScale::Scale75, "75% (HD)"),
+                    (GifScale::Scale100, "100% (Full)"),
+                ];
+                for (scale_opt, lbl) in scales {
+                    if ui
+                        .selectable_label(self.config.gif_scale == scale_opt, lbl)
+                        .clicked()
+                    {
+                        self.config.gif_scale = scale_opt;
+                    }
+                }
+            });
+
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(text(I18nKey::GifFpsLabel, lang)).color(TEXT_BODY));
+                for &fps_opt in &[10u32, 15, 30] {
+                    if ui
+                        .selectable_label(
+                            self.config.gif_fps == fps_opt,
+                            format!("{} FPS", fps_opt),
+                        )
+                        .clicked()
+                    {
+                        self.config.gif_fps = fps_opt;
+                    }
+                }
+            });
+
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(text(I18nKey::GifMaxDurationLabel, lang)).color(TEXT_BODY));
+                ui.add(
+                    egui::Slider::new(&mut self.config.gif_max_duration_secs, 5..=15).suffix(" s"),
+                );
             });
         });
     }

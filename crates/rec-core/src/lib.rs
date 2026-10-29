@@ -19,6 +19,7 @@ pub mod config;
 pub mod cursor_effects;
 pub mod errors;
 pub mod frame;
+pub mod gif_exporter;
 pub mod i18n;
 pub mod pixel_format;
 pub mod ring_buffer;
@@ -31,6 +32,7 @@ pub use cursor_effects::{
 };
 pub use errors::CoreError;
 pub use frame::{Dts, FrameDescriptor, Pts, VideoFrame};
+pub use gif_exporter::{export_avi_to_gif, GifExportOptions, GifScale, GifWriter};
 pub use i18n::{text, I18nKey, Language};
 pub use pixel_format::PixelFormat;
 pub use ring_buffer::LockFreeRingBuffer;

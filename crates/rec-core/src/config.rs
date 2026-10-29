@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use crate::cursor_effects::CursorHighlightColor;
 use crate::errors::CoreError;
+use crate::gif_exporter::GifScale;
 use crate::i18n::Language;
 
 /// Application configuration with sanitation and persistence support.
@@ -47,10 +48,27 @@ pub struct AppConfig {
     /// Selected color preset for the cursor highlight halo.
     #[serde(default)]
     pub cursor_halo_color: CursorHighlightColor,
+    /// Target frame rate for animated GIF exports (`10`, `15`, or `30` FPS, `[REQ-GIF-001.3]`).
+    #[serde(default = "default_gif_fps")]
+    pub gif_fps: u32,
+    /// Resolution scaling preset for animated GIF exports (`[REQ-GIF-001.3]`).
+    #[serde(default)]
+    pub gif_scale: GifScale,
+    /// Maximum clip duration in seconds for animated GIF exports (`5..=15`, default `10`).
+    #[serde(default = "default_gif_max_duration_secs")]
+    pub gif_max_duration_secs: u32,
 }
 
 const fn default_cursor_halo_radius() -> u32 {
     28
+}
+
+const fn default_gif_fps() -> u32 {
+    15
+}
+
+const fn default_gif_max_duration_secs() -> u32 {
+    10
 }
 
 impl Default for AppConfig {
@@ -80,6 +98,9 @@ impl Default for AppConfig {
             cursor_click_ripples_enabled: true,
             cursor_halo_radius: 28,
             cursor_halo_color: CursorHighlightColor::YellowGlow,
+            gif_fps: 15,
+            gif_scale: GifScale::Scale75,
+            gif_max_duration_secs: 10,
         }
     }
 }
@@ -134,6 +155,10 @@ impl AppConfig {
         self.microphone_gain_percent = self.microphone_gain_percent.clamp(0, 200);
         // Clamp cursor halo radius between 12 and 64 pixels
         self.cursor_halo_radius = self.cursor_halo_radius.clamp(12, 64);
+        // Clamp GIF export FPS between 5 and 30 FPS
+        self.gif_fps = self.gif_fps.clamp(5, 30);
+        // Clamp GIF max duration between 5 and 15 seconds
+        self.gif_max_duration_secs = self.gif_max_duration_secs.clamp(5, 15);
     }
 
     /// Validates the configuration and returns an error if any domain invariant is violated.

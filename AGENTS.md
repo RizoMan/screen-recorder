@@ -104,15 +104,15 @@ El proyecto se rige de manera inviolable por **SPEC-DRIVEN DEVELOPMENT (SDD)**, 
 ## 4. PRINCIPIOS DE DISEÑO: SOLID, KISS, DRY Y POO
 
 ### Principios SOLID
-- **S (Single Responsibility)**: Cada crate y módulo tiene un único motivo de cambio. `rec-core` define los modelos matemáticos y tipos puros; las plataformas solo interactúan con el SO; `rec-engine` solo orquesta el flujo de frames; `rec-app` solo gestiona UI y eventos del usuario.
+- **S (Single Responsibility)**: Cada crate, módulo y archivo tiene un único motivo de cambio. `rec-core` define los modelos matemáticos y tipos puros; las plataformas solo interactúan con el SO; `rec-engine` solo orquesta el flujo de frames; `rec-app` separa estrictamente modelos (`gui/models.rs`), controlador (`gui.rs`), vistas de dashboard (`gui/dashboard.rs`) y paneles de ajustes (`gui/settings.rs`). **Prohibidos los archivos monolíticos (>500 líneas) que mezclen modelos, controlador y vistas**.
 - **O (Open/Closed)**: El motor está abierto a nuevos backends (ej. WebRTC, cámara virtual) simplemente implementando `CaptureBackend`, sin modificar una sola línea del pipeline de `rec-engine`.
 - **L (Liskov Substitution)**: Cualquier backend de captura (`WgcBackend`, `DxgiBackend`, `PipeWireBackend`, `ScreenCaptureKitBackend`) puede sustituir a otro en `rec-engine` manteniendo las garantías de entrega de `VideoFrame` y códigos de error tipados.
 - **I (Interface Segregation)**: Interfaces pequeñas y atómicas. No existe una mega-interfaz monolítica: el audio tiene `AudioBackend`, el video `CaptureBackend`, el codificador `EncoderBackend`.
 - **D (Dependency Inversion)**: `rec-engine` no depende de `rec-platform-windows`. Depende del trait `CaptureBackend`. La aplicación (`rec-app`) es quien compone e inyecta la implementación concreta en tiempo de ejecución.
 
 ### Principios KISS y DRY
-- **KISS**: Evitar macros complejas o runtimes async innecesarios en el hot path. Canales preasignados con hilos nativos de SO proporcionan determinismo absoluto y latencia predecible.
-- **DRY**: Los cálculos de timestamps, conversiones de formato de píxeles, funciones de resampling de audio y catálogo de textos bilingües están centralizados en `rec-core`.
+- **KISS**: Evitar macros complejas o runtimes async innecesarios en el hot path. Canales preasignados con hilos nativos de SO proporcionan determinismo absoluto y latencia predecible. **Prohibido usar acciones tipadas con strings (`Option<&'static str>`) o comparaciones de cadenas mágicas (`duration_str == "Snapshot"`) para inferir estado; usar siempre `enum`s explícitos (`HudAction`, `RecentMediaKind`)**.
+- **DRY**: Los cálculos de timestamps, conversiones de formato de píxeles, funciones de resampling de audio y catálogo de textos bilingües están centralizados en `rec-core`. **Prohibido duplicar campos de estado entre `RecorderGuiApp` y `AppConfig`, duplicar lógica de control entre botones UI/Hotkeys/Tray, o duplicar widgets visuales (como vúmetros o badges) fuera de `theme.rs`**.
 
 ### POO Idiomática en Rust
 - Constructores `new() -> Result<Self, Error>` que hacen imposible crear instancias en estado inválido.
@@ -122,34 +122,16 @@ El proyecto se rige de manera inviolable por **SPEC-DRIVEN DEVELOPMENT (SDD)**, 
 
 ---
 
-## 5. REGLAS INNEGOCIABLES (IRONCLAD RULES)
+## 5. REGLAS INNEGOCIABLES (IRONCLAD RULES — `.agents/rules/`)
 
-1. **ZERO `unwrap()` O `expect()` EN CÓDIGO DE PRODUCCIÓN**:
-   - Errores modelados exclusivamente con `thiserror`.
-   - Propagación obligatoria mediante `?`.
-   - `unwrap()` solo admisible en pruebas unitarias `#[cfg(test)]`.
-
-2. **DOCUMENTACIÓN RUSTDOC OBLIGATORIA (0 ADVERTENCIAS)**:
-   - Toda entidad pública debe documentarse con `///` o `//!` usando GitHub-Flavored Markdown.
-   - Secciones obligatorias: `# Arguments`, `# Returns`, `# Errors`, `# Examples`.
-   - `cargo doc --workspace --no-deps` debe compilar siempre con 0 advertencias.
-
-3. **RAII ABSOLUTO**:
-   - Todo contexto DirectX, WinRT session, stream de PipeWire, textura de GPU o archivo abierto implementa `Drop`.
-   - Garantía de liberación inmediata de hardware en cualquier caso de error o salida abrupta.
-
-4. **INTERNACIONALIZACIÓN INMEDIATA 100% BILINGÜE**:
-   - Cero cadenas de texto quemadas en UI o CLI.
-   - Paridad inmediata Inglés / Español en `rec_core::i18n`.
-   - Test automatizado obligatorio de no vacuidad y paridad.
-
-5. **SEGURIDAD FFI Y `unsafe`**:
-   - `rec-core` y `rec-engine` con `#![forbid(unsafe_code)]`.
-   - Todo bloque `unsafe` en crates de plataforma debe llevar `// SAFETY: <explicación exhaustiva>`.
-
-6. **EMPAQUETADO AUTOMATIZADO CON BUMP DE VERSIÓN**:
-   - Scripts de empaquetado (Inno Setup en Windows, scripts de bundling en Linux/macOS) en `packaging/`.
-   - Incremento semántico de versión en cada ciclo de entrega. Prohibido entregar binarios crudos sueltos de `target/`.
+| ID de Regla | Archivo Normativo | Mandato Inviolable |
+| :--- | :--- | :--- |
+| **`RULE-SDD-001`** | `.agents/rules/sdd_protocol.md` | **Spec-Driven Development**: Prohibido escribir código sin antes crear/actualizar su `.spec.md` en `specs/` con `[SPEC-*]`, `[REQ-*]`, `[CONTRACT-*]`, `[NFR-*]` y `[TEST-*]`. |
+| **`RULE-ARCH-001`** | `.agents/rules/architecture_principles.md` | **SOLID, KISS, DRY y POO Idiomática**: Separación estricta SRP (cero monolitos), cero duplicación de lógica/estado (DRY), cero acciones basadas en strings mágicos (KISS). |
+| **`RULE-SAFE-001`** | `.agents/rules/testing_and_safety.md` | **Zero `unwrap()`/`expect()` & RAII**: Errores con `thiserror` y `?`. `#![forbid(unsafe_code)]` en `rec-core`/`rec-engine`. Todo `unsafe` en plataformas con `// SAFETY:`. |
+| **`RULE-DOC-001`** | `.agents/rules/rustdoc_markdown.md` | **Rustdoc & GFM Markdown (0 Advertencias)**: Toda función pública debe incluir `# Arguments` (si recibe parámetros), `# Returns` (si retorna `!= ()`), `# Errors` (si retorna `Result`) y `# Examples` compilables. |
+| **`RULE-I18N-001`** | `.agents/rules/mandatory_i18n.md` | **Internacionalización 100% Bilingüe (EN/ES)**: Cero cadenas quemadas en UI/CLI, cero `if lang == ...` ad-hoc en vistas, y paridad `en != es` verificada por test. |
+| **`RULE-PKG-001`** | `.agents/rules/packaging_mandatory_testing.md` | **Empaquetado Automatizado con Bump de Versión**: Ejecutar `cargo test`, `cargo clippy -- -D warnings`, `cargo doc --no-deps` y generar instalador Inno Setup con incremento semántico en cada entrega. |
 
 ---
 
@@ -167,4 +149,5 @@ El proyecto se rige de manera inviolable por **SPEC-DRIVEN DEVELOPMENT (SDD)**, 
 | `[SPEC-GUI-001]` | `specs/03_app_ui/recorder_gui_hud.spec.md` | GUI moderna, selector de área interactivo y HUD transparente |
 | `[SPEC-FEAT-REPLAY-001]` | `specs/04_features/01_instant_replay_buffer.spec.md` | Buffer circular de repetición instantánea en memoria |
 | `[SPEC-FEAT-CURSOR-001]` | `specs/04_features/02_smart_cursor_effects.spec.md` | Efectos inteligentes de cursor (Halo y ondas de clic) |
+| `[SPEC-FEAT-GIF-001]` | `specs/04_features/03_animated_gif_export.spec.md` | Exportación rápida de clips a formato GIF animado HD |
 | `[SPEC-QA-001]` | `specs/05_qa/manual_qa_playbook.spec.md` | Matriz de pruebas manuales, estabilidad y verificación de audio/video |

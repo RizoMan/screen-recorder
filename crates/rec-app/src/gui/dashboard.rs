@@ -20,11 +20,14 @@ impl RecorderGuiApp {
     pub(crate) fn render_top_header(&mut self, ui: &mut egui::Ui, lang: Language) {
         ui.horizontal(|ui| {
             // App icon: bullseye / target icon
-            let (icon_rect, _) = ui.allocate_exact_size(Vec2::new(26.0, 26.0), egui::Sense::hover());
-            ui.painter().rect_filled(icon_rect, CornerRadius::same(6), COLOR_PRIMARY);
+            let (icon_rect, _) =
+                ui.allocate_exact_size(Vec2::new(26.0, 26.0), egui::Sense::hover());
+            ui.painter()
+                .rect_filled(icon_rect, CornerRadius::same(6), COLOR_PRIMARY);
             ui.painter()
                 .circle_stroke(icon_rect.center(), 7.0, Stroke::new(2.0, Color32::WHITE));
-            ui.painter().circle_filled(icon_rect.center(), 3.0, Color32::WHITE);
+            ui.painter()
+                .circle_filled(icon_rect.center(), 3.0, Color32::WHITE);
 
             ui.add_space(6.0);
 
@@ -74,19 +77,19 @@ impl RecorderGuiApp {
 
             // Right side navigation and window controls
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let min_btn = egui::Button::new(
-                    RichText::new("—").size(14.0).strong().color(TEXT_HEADLINE),
-                )
-                .min_size(Vec2::new(36.0, 32.0))
-                .fill(BG_CARD)
-                .stroke(Stroke::new(1.0, BORDER_SUBTLE))
-                .corner_radius(CornerRadius::same(6));
+                let min_btn =
+                    egui::Button::new(RichText::new("—").size(14.0).strong().color(TEXT_HEADLINE))
+                        .min_size(Vec2::new(36.0, 32.0))
+                        .fill(BG_CARD)
+                        .stroke(Stroke::new(1.0, BORDER_SUBTLE))
+                        .corner_radius(CornerRadius::same(6));
                 if ui
                     .add(min_btn)
                     .on_hover_text(text(I18nKey::TrayMinimizeToTray, lang))
                     .clicked()
                 {
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Visible(false));
+                    ui.ctx()
+                        .send_viewport_cmd(egui::ViewportCommand::Visible(false));
                 }
 
                 ui.add_space(4.0);
@@ -119,13 +122,21 @@ impl RecorderGuiApp {
                     RichText::new(text(I18nKey::NavSettings, lang))
                         .size(13.0)
                         .strong()
-                        .color(if is_settings { Color32::WHITE } else { TEXT_BODY }),
+                        .color(if is_settings {
+                            Color32::WHITE
+                        } else {
+                            TEXT_BODY
+                        }),
                 )
                 .min_size(Vec2::new(100.0, 32.0))
                 .fill(if is_settings { COLOR_PRIMARY } else { BG_CARD })
                 .stroke(Stroke::new(
                     1.0,
-                    if is_settings { COLOR_PRIMARY_HOVER } else { BORDER_SUBTLE },
+                    if is_settings {
+                        COLOR_PRIMARY_HOVER
+                    } else {
+                        BORDER_SUBTLE
+                    },
                 ))
                 .corner_radius(CornerRadius::same(6));
 
@@ -144,13 +155,21 @@ impl RecorderGuiApp {
                     RichText::new(text(I18nKey::NavDashboard, lang))
                         .size(13.0)
                         .strong()
-                        .color(if is_general { Color32::WHITE } else { TEXT_BODY }),
+                        .color(if is_general {
+                            Color32::WHITE
+                        } else {
+                            TEXT_BODY
+                        }),
                 )
                 .min_size(Vec2::new(90.0, 32.0))
                 .fill(if is_general { COLOR_PRIMARY } else { BG_CARD })
                 .stroke(Stroke::new(
                     1.0,
-                    if is_general { COLOR_PRIMARY_HOVER } else { BORDER_SUBTLE },
+                    if is_general {
+                        COLOR_PRIMARY_HOVER
+                    } else {
+                        BORDER_SUBTLE
+                    },
                 ))
                 .corner_radius(CornerRadius::same(6));
 
@@ -210,15 +229,19 @@ impl RecorderGuiApp {
 
             for (m, lbl) in modes {
                 let selected = self.capture_mode == m;
-                let btn = egui::Button::new(
-                    RichText::new(lbl)
-                        .size(13.0)
-                        .color(if selected { Color32::WHITE } else { TEXT_BODY }),
-                )
+                let btn = egui::Button::new(RichText::new(lbl).size(13.0).color(if selected {
+                    Color32::WHITE
+                } else {
+                    TEXT_BODY
+                }))
                 .fill(if selected { COLOR_PRIMARY } else { BG_CARD })
                 .stroke(Stroke::new(
                     1.0,
-                    if selected { COLOR_PRIMARY } else { BORDER_SUBTLE },
+                    if selected {
+                        COLOR_PRIMARY
+                    } else {
+                        BORDER_SUBTLE
+                    },
                 ))
                 .corner_radius(CornerRadius::same(6));
 
@@ -388,7 +411,10 @@ impl RecorderGuiApp {
                             .color(TEXT_HEADLINE),
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.checkbox(&mut self.config.cursor_halo_enabled, "").changed() {
+                        if ui
+                            .checkbox(&mut self.config.cursor_halo_enabled, "")
+                            .changed()
+                        {
                             self.pipeline.set_config(self.config.clone());
                         }
                     });
@@ -576,21 +602,32 @@ impl RecorderGuiApp {
         let mut should_copy = false;
         let mut should_play = false;
         let mut should_open_folder = false;
+        let mut should_export_gif = false;
 
         if let Some(ref meta) = self.last_recording {
             card_frame().show(ui, |ui| {
                 ui.horizontal(|ui| {
                     let is_snapshot = meta.is_snapshot();
+                    let is_gif = meta.is_gif();
+                    let is_video = meta.is_video();
                     let (icon_rect, _) =
                         ui.allocate_exact_size(Vec2::new(36.0, 36.0), egui::Sense::hover());
                     let bg_color = if is_snapshot {
                         Color32::from_rgb(0x1E, 0x3A, 0x8A)
+                    } else if is_gif {
+                        Color32::from_rgb(0x4C, 0x1D, 0x95)
                     } else {
                         Color32::from_rgb(0x06, 0x4E, 0x3B)
                     };
                     ui.painter()
                         .rect_filled(icon_rect, CornerRadius::same(8), bg_color);
-                    let icon_glyph = if is_snapshot { "📷" } else { "🎬" };
+                    let icon_glyph = if is_snapshot {
+                        "📷"
+                    } else if is_gif {
+                        "🎞"
+                    } else {
+                        "🎬"
+                    };
                     ui.painter().text(
                         icon_rect.center(),
                         egui::Align2::CENTER_CENTER,
@@ -608,6 +645,8 @@ impl RecorderGuiApp {
                             ui.label(RichText::new(file_name).strong().color(TEXT_HEADLINE));
                             let badge_text = if is_snapshot {
                                 text(I18nKey::SnapshotBadge, lang)
+                            } else if is_gif {
+                                text(I18nKey::GifBadge, lang)
                             } else {
                                 text(I18nKey::RecentRecording, lang)
                             };
@@ -666,6 +705,20 @@ impl RecorderGuiApp {
                             should_copy = true;
                         }
 
+                        if is_video {
+                            let gif_btn = egui::Button::new(
+                                RichText::new(format!("🎞 {}", text(I18nKey::BtnExportGif, lang)))
+                                    .size(12.0)
+                                    .strong()
+                                    .color(Color32::WHITE),
+                            )
+                            .fill(Color32::from_rgb(0x6D, 0x28, 0xD9))
+                            .corner_radius(CornerRadius::same(6));
+                            if ui.add(gif_btn).clicked() {
+                                should_export_gif = true;
+                            }
+                        }
+
                         let play_btn = egui::Button::new(
                             RichText::new(format!("▶ {}", text(I18nKey::BtnPlay, lang)))
                                 .size(12.0)
@@ -682,6 +735,10 @@ impl RecorderGuiApp {
             });
         }
 
+        if should_export_gif {
+            self.export_last_recording_to_gif();
+        }
+
         if should_delete {
             if let Some(ref meta) = self.last_recording {
                 let _ = std::fs::remove_file(&meta.path);
@@ -693,7 +750,8 @@ impl RecorderGuiApp {
         if should_copy {
             if let Some(ref meta) = self.last_recording {
                 ui.ctx().copy_text(meta.path.to_string_lossy().to_string());
-                self.status_message = Some(text(I18nKey::StatusCopiedToClipboard, lang).to_string());
+                self.status_message =
+                    Some(text(I18nKey::StatusCopiedToClipboard, lang).to_string());
             }
         }
 
@@ -712,4 +770,3 @@ impl RecorderGuiApp {
         }
     }
 }
-

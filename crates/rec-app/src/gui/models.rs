@@ -96,14 +96,19 @@ pub enum RecentMediaKind {
     },
     /// Static PNG screenshot capture.
     Snapshot,
+    /// Exported animated GIF89a clip (`[SPEC-FEAT-GIF-001]`).
+    AnimatedGif {
+        /// Human-readable GIF parameters (e.g., `"15 FPS • 75%"`).
+        spec_str: String,
+    },
 }
 
-/// Metadata summary of the most recent recording or screenshot.
+/// Metadata summary of the most recent recording, screenshot, or animated GIF.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecentRecordingMeta {
     /// Absolute path to the saved media file on disk.
     pub path: PathBuf,
-    /// Classification of the media artifact (video clip vs. static snapshot).
+    /// Classification of the media artifact (video clip, static snapshot, or animated GIF).
     pub kind: RecentMediaKind,
     /// Formatted file size string (e.g., `"14.2 MB"` or `"320.5 KB"`).
     pub size_str: String,
@@ -120,20 +125,41 @@ impl RecentRecordingMeta {
         matches!(self.kind, RecentMediaKind::Snapshot)
     }
 
+    /// Returns `true` if this media item is a recorded `.avi` video clip that can be exported to GIF.
+    ///
+    /// # Returns
+    ///
+    /// `true` when `self.kind` is [`RecentMediaKind::Video`].
+    #[must_use]
+    pub const fn is_video(&self) -> bool {
+        matches!(self.kind, RecentMediaKind::Video { .. })
+    }
+
+    /// Returns `true` if this media item is an exported animated `.gif`.
+    ///
+    /// # Returns
+    ///
+    /// `true` when `self.kind` is [`RecentMediaKind::AnimatedGif`].
+    #[must_use]
+    pub const fn is_gif(&self) -> bool {
+        matches!(self.kind, RecentMediaKind::AnimatedGif { .. })
+    }
+
     /// Returns the human-readable duration or type label for display in the UI.
     ///
     /// # Arguments
     ///
-    /// * `lang` - Active display [`Language`] used to localize snapshot labels.
+    /// * `lang` - Active display [`Language`] used to localize snapshot/GIF labels.
     ///
     /// # Returns
     ///
-    /// Duration string for videos, or localized snapshot label for screenshots.
+    /// Duration string for videos, GIF spec string for GIFs, or localized snapshot label for screenshots.
     #[must_use]
     pub fn display_duration(&self, lang: Language) -> &str {
         match self.kind {
             RecentMediaKind::Video { ref duration_str } => duration_str.as_str(),
             RecentMediaKind::Snapshot => text(I18nKey::SnapshotBadge, lang),
+            RecentMediaKind::AnimatedGif { ref spec_str } => spec_str.as_str(),
         }
     }
 }

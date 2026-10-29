@@ -14,6 +14,8 @@ pub mod settings;
 use std::path::PathBuf;
 use eframe::egui;
 use rec_core::config::AppConfig;
+use rec_core::gif_exporter::{export_avi_to_gif, GifExportOptions};
+use rec_core::i18n::{text, I18nKey};
 use rec_engine::pipeline::RecordingPipeline;
 use rec_engine::traits::CaptureTarget;
 use rec_platform_windows::{
@@ -236,6 +238,47 @@ impl RecorderGuiApp {
             kind: RecentMediaKind::Video { duration_str },
             size_str,
         });
+    }
+
+    /// Exports the most recently recorded `.avi` video clip into an animated `.gif` file
+    /// using the user's configured [`GifExportOptions`] (`[REQ-GIF-001.4]`, `[REQ-GIF-001.5]`).
+    pub fn export_last_recording_to_gif(&mut self) {
+        let Some(ref meta) = self.last_recording else {
+            return;
+        };
+        if !meta.is_video() {
+            return;
+        }
+
+        let avi_path = meta.path.clone();
+        let gif_path = avi_path.with_extension("gif");
+        let opts = GifExportOptions::new(
+            self.config.gif_fps,
+            self.config.gif_scale,
+            self.config.gif_max_duration_secs,
+        );
+        let lang = self.config.language;
+
+        match export_avi_to_gif(&avi_path, &gif_path, opts) {
+            Ok(saved_path) => {
+                let bytes = saved_path.metadata().map(|m| m.len()).unwrap_or(0);
+                let size_str = if bytes >= 1_048_576 {
+                    format!("{:.1} MB", bytes as f64 / 1_048_576.0)
+                } else {
+                    format!("{:.1} KB", bytes as f64 / 1024.0)
+                };
+                let spec_str = format!("{} FPS • {}%", opts.fps, opts.scale.percent());
+                self.last_recording = Some(RecentRecordingMeta {
+                    path: saved_path,
+                    kind: RecentMediaKind::AnimatedGif { spec_str },
+                    size_str,
+                });
+                self.status_message = Some(text(I18nKey::StatusGifExported, lang).to_string());
+            }
+            Err(err) => {
+                self.status_message = Some(format!("GIF export failed: {}", err));
+            }
+        }
     }
 
     /// Triggers an immediate, non-blocking snapshot screenshot of the active capture target.

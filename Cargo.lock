@@ -2788,7 +2788,7 @@ dependencies = [
 
 [[package]]
 name = "rec-app"
-version = "0.1.22"
+version = "0.1.23"
 dependencies = [
  "chrono",
  "crossbeam-channel",
@@ -2806,7 +2806,7 @@ dependencies = [
 
 [[package]]
 name = "rec-core"
-version = "0.1.22"
+version = "0.1.23"
 dependencies = [
  "chrono",
  "image",
@@ -2818,7 +2818,7 @@ dependencies = [
 
 [[package]]
 name = "rec-engine"
-version = "0.1.22"
+version = "0.1.23"
 dependencies = [
  "chrono",
  "crossbeam-channel",
@@ -2830,7 +2830,7 @@ dependencies = [
 
 [[package]]
 name = "rec-platform-linux"
-version = "0.1.22"
+version = "0.1.23"
 dependencies = [
  "crossbeam-channel",
  "log",
@@ -2841,7 +2841,7 @@ dependencies = [
 
 [[package]]
 name = "rec-platform-macos"
-version = "0.1.22"
+version = "0.1.23"
 dependencies = [
  "crossbeam-channel",
  "log",
@@ -2852,7 +2852,7 @@ dependencies = [
 
 [[package]]
 name = "rec-platform-windows"
-version = "0.1.22"
+version = "0.1.23"
 dependencies = [
  "cpal",
  "crossbeam-channel",

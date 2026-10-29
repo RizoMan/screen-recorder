@@ -266,6 +266,20 @@ pub enum I18nKey {
     HotkeyReplayLabel,
     /// Hotkey description for pausing/resuming recording.
     HotkeyPauseResumeLabel,
+    /// Button label to export a recent video recording as an animated GIF.
+    BtnExportGif,
+    /// Badge label for animated GIF media items.
+    GifBadge,
+    /// Status notification when animated GIF export completes.
+    StatusGifExported,
+    /// Section header for Animated GIF Export settings.
+    GifExportSectionTitle,
+    /// Label for GIF resolution scale selector.
+    GifScaleLabel,
+    /// Label for GIF frame rate selector.
+    GifFpsLabel,
+    /// Label for GIF maximum clip duration slider.
+    GifMaxDurationLabel,
 }
 
 impl I18nKey {
@@ -386,6 +400,13 @@ impl I18nKey {
             I18nKey::HotkeySnapshotLabel,
             I18nKey::HotkeyReplayLabel,
             I18nKey::HotkeyPauseResumeLabel,
+            I18nKey::BtnExportGif,
+            I18nKey::GifBadge,
+            I18nKey::StatusGifExported,
+            I18nKey::GifExportSectionTitle,
+            I18nKey::GifScaleLabel,
+            I18nKey::GifFpsLabel,
+            I18nKey::GifMaxDurationLabel,
         ]
     }
 }
@@ -528,6 +549,13 @@ pub fn text(key: I18nKey, lang: Language) -> &'static str {
             I18nKey::HotkeySnapshotLabel => "Take Screenshot / Snapshot:",
             I18nKey::HotkeyReplayLabel => "Save Instant Replay:",
             I18nKey::HotkeyPauseResumeLabel => "Pause / Resume Recording:",
+            I18nKey::BtnExportGif => "Export GIF",
+            I18nKey::GifBadge => "Animated GIF",
+            I18nKey::StatusGifExported => "✓ Animated GIF exported successfully",
+            I18nKey::GifExportSectionTitle => "Animated GIF HD Export (5–15s Clips)",
+            I18nKey::GifScaleLabel => "GIF Resolution Scale",
+            I18nKey::GifFpsLabel => "GIF Frame Rate",
+            I18nKey::GifMaxDurationLabel => "Max GIF Clip Duration",
         },
         Language::Spanish => match key {
             I18nKey::AppTitle => "Screen Recorder Pro",
@@ -643,6 +671,13 @@ pub fn text(key: I18nKey, lang: Language) -> &'static str {
             I18nKey::HotkeySnapshotLabel => "Captura de Imagen / Snapshot:",
             I18nKey::HotkeyReplayLabel => "Guardar Repetición Instantánea:",
             I18nKey::HotkeyPauseResumeLabel => "Pausar / Reanudar Grabación:",
+            I18nKey::BtnExportGif => "Exportar GIF",
+            I18nKey::GifBadge => "GIF Animado",
+            I18nKey::StatusGifExported => "✓ GIF animado exportado correctamente",
+            I18nKey::GifExportSectionTitle => "Exportación a GIF Animado HD (Clips 5–15s)",
+            I18nKey::GifScaleLabel => "Escala de Resolución GIF",
+            I18nKey::GifFpsLabel => "Cuadros por Segundo (FPS GIF)",
+            I18nKey::GifMaxDurationLabel => "Duración Máxima del Clip GIF",
         },
     }
 }

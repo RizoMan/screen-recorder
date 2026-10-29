@@ -50,3 +50,12 @@ Every public struct, enum, trait, method, and function must include Rustdoc docu
 ### Module and Trait Structure
 - Every file must begin with an inner doc comment `//!` providing module overview, role within the Clean Architecture topology, and relevant `[SPEC-...]` tags.
 - Traits must document their contract invariants, thread-safety assumptions (`Send + Sync`), and expected lifecycle.
+
+---
+
+## 3. Strict Verification Checklist for Every Public Item
+1. **`# Arguments`**: Mandatory on every `pub fn` that accepts one or more parameters (excluding bare `&self` / `&mut self`).
+2. **`# Returns`**: Mandatory on every `pub fn` whose return type is not `()`.
+3. **`# Errors`**: Mandatory on every `pub fn` returning `Result<T, E>`, explicitly linking error variants via intra-doc links (`[`CoreError::...`]`).
+4. **`# Examples`**: Mandatory with compilable ```` ```rust ```` doc-tests on domain functions and types in `rec-core` and `rec-engine`.
+5. **GitHub-Flavored Markdown (GFM)**: All specification files (`specs/**/*.spec.md`), rules (`.agents/rules/*.md`), and Rustdoc comments must use clean GFM tables, fenced code blocks with language tags, and valid intra-doc links.
