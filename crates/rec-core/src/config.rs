@@ -64,7 +64,7 @@ const fn default_cursor_halo_radius() -> u32 {
 }
 
 const fn default_gif_fps() -> u32 {
-    15
+    20
 }
 
 const fn default_gif_max_duration_secs() -> u32 {
@@ -98,8 +98,8 @@ impl Default for AppConfig {
             cursor_click_ripples_enabled: true,
             cursor_halo_radius: 28,
             cursor_halo_color: CursorHighlightColor::YellowGlow,
-            gif_fps: 15,
-            gif_scale: GifScale::Scale75,
+            gif_fps: 20,
+            gif_scale: GifScale::Scale100,
             gif_max_duration_secs: 10,
         }
     }

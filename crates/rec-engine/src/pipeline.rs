@@ -240,8 +240,8 @@ impl RecordingPipeline {
         let (enc_tx, enc_rx) = bounded::<EncodedFrame>(num_workers * 4);
 
         let quality_crf = self.config.quality_crf;
-        // Map CRF (0..51) to JPEG quality (35..80). Default CRF 23 -> quality 52.
-        let jpeg_quality = (84u32.saturating_sub((quality_crf as u32 * 14) / 10)).clamp(35, 80) as u8;
+        // Map CRF (0..51) to high-definition JPEG quality (60..95). Default CRF 23 -> quality 82.
+        let jpeg_quality = (98u32.saturating_sub((quality_crf as u32 * 7) / 10)).clamp(60, 95) as u8;
 
         let mut encoder_handles = Vec::with_capacity(num_workers);
         for i in 0..num_workers {

@@ -14,9 +14,10 @@ This specification defines the architecture, domain models, quantization/LZW alg
 ## 2. Functional Requirements (`[REQ-GIF-001]`)
 
 - **`[REQ-GIF-001.1]` Pure Safe Rust GIF89a Encoder**:
-  - Implement a 100% memory-safe (`#![forbid(unsafe_code)]`) GIF89a encoder in `rec-core::gif_exporter` producing standards-compliant `.gif` files with `GIF89a` header, Logical Screen Descriptor, Global Color Table (256 colors), `NETSCAPE2.0` Application Extension for infinite looping, Graphic Control Extensions for frame timing, and LZW-compressed image data sub-blocks.
-- **`[REQ-GIF-001.2]` Perceptual Palette Quantization & Temporal Dithering**:
-  - Use a deterministic 256-color palette (240 perceptual RGB levels `6×8×5` + 16 precision grayscale levels) combined with $O(1)$ 4×4 Bayer ordered dithering to eliminate color banding on UI gradients while maintaining temporal stability across static desktop areas.
+  - Implement a 100% memory-safe (`#![forbid(unsafe_code)]`) GIF89a encoder in `rec-core::gif_exporter` producing standards-compliant `.gif` files with `GIF89a` header, Logical Screen Descriptor, per-frame 256-color Adaptive Local Color Tables, `NETSCAPE2.0` Application Extension for infinite looping, Graphic Control Extensions for frame timing, and LZW-compressed image data sub-blocks.
+- **`[REQ-GIF-001.2]` Adaptive Median-Cut Palette Quantization, Clamped Floyd-Steinberg Dithering & Bicubic Resampling**:
+  - Compute a per-frame 256-color adaptive palette via 3D histogram (`32×32×32`) Median-Cut with exact 8-bit RGB centroid averaging, accelerated by a 3D nearest-neighbor lookup table (`32,768` entries) and subtle clamped Floyd-Steinberg error diffusion.
+  - Perform resolution scaling using `image::imageops::FilterType::CatmullRom` bicubic resampling to preserve crisp typography and UI edges, defaulting to `GifScale::Scale100` (full native resolution).
 - **`[REQ-GIF-001.3]` Configurable Scale, Frame Rate & Duration Window**:
   - Support export resolution scaling via `GifScale` (`Scale50` = 50%, `Scale75` = 75%, `Scale100` = 100%), target frame rate (`10`, `15`, or `30` FPS), and maximum clip duration (`5` to `15` seconds, default `10` seconds) in `AppConfig`.
 - **`[REQ-GIF-001.4]` Direct AVI-to-GIF Conversion (`export_avi_to_gif`)**:

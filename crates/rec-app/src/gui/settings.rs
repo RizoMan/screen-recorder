@@ -680,7 +680,7 @@ impl RecorderGuiApp {
             ui.add_space(4.0);
             ui.horizontal(|ui| {
                 ui.label(RichText::new(text(I18nKey::GifFpsLabel, lang)).color(TEXT_BODY));
-                for &fps_opt in &[10u32, 15, 30] {
+                for &fps_opt in &[15u32, 20, 30] {
                     if ui
                         .selectable_label(
                             self.config.gif_fps == fps_opt,

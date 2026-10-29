@@ -164,7 +164,7 @@ impl AviWriter {
             ));
         }
 
-        let jpeg_bytes = encode_frame_to_jpeg(frame, 58)?;
+        let jpeg_bytes = encode_frame_to_jpeg(frame, 82)?;
         self.append_jpeg_chunk(&jpeg_bytes)?;
         self.last_jpeg_chunk = Some(jpeg_bytes);
         Ok(())
