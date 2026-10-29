@@ -225,26 +225,3 @@ impl VideoFrame {
         Ok(())
     }
 }
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_valid_video_frame_construction() {
-        let desc = FrameDescriptor::new(100, 100, PixelFormat::Rgba).unwrap();
-        let expected_size = desc.required_buffer_size();
-        let data = vec![0u8; expected_size];
-        let frame = VideoFrame::new(desc, Pts::from_nanos(100), data);
-        assert!(frame.is_ok());
-    }
-
-    #[test]
-    fn test_short_buffer_returns_error() {
-        let desc = FrameDescriptor::new(100, 100, PixelFormat::Rgba).unwrap();
-        let short_data = vec![0u8; 10];
-        let frame = VideoFrame::new(desc, Pts::from_nanos(100), short_data);
-        assert!(matches!(frame, Err(CoreError::InvalidBufferSize { .. })));
-    }
-}

@@ -22,7 +22,8 @@ While classic Object-Oriented Programming (OOP) relies heavily on class inherita
   - `rec-app`: Presentation and user interaction only.
 - **Anti-Monolith Rule (Module-Level SRP)**:
   - Never combine domain/UI state models, controller event dispatch, and multiple view panels inside a single monolithic file exceeding ~500 lines.
-  - In `rec-app`, separate state models (`gui/models.rs`), controller actions (`gui.rs`), dashboard views (`gui/dashboard.rs`), and settings modals (`gui/settings.rs`) into dedicated submodules.
+  - In `rec-app`, separate state models (`gui/models.rs`), controller actions (`gui.rs`), dashboard views (`gui/dashboard.rs`), modals (`gui/trim_modal.rs`), and settings (`gui/settings.rs`) into dedicated submodules.
+  - Never embed inline `#[cfg(test)] mod tests { ... }` blocks inside production `src/*.rs` files; keep all test suites in dedicated `tests/` files so production modules remain concise and single-purpose.
 
 ### O — Open/Closed Principle (OCP)
 - Systems must be open for extension, but closed for modification.

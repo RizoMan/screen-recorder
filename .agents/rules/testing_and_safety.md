@@ -34,7 +34,8 @@ Status: MANDATORY / IRONCLAD
 
 ---
 
-## 4. Testing Standards and Coverage
+## 4. Testing Standards, Coverage, and Physical File Separation (Zero Inline Tests)
+- **Zero Inline Tests in Production Files**: Production source files (`src/*.rs`) **MUST NEVER** contain inline `#[cfg(test)] mod tests { ... }` blocks. All unit and integration test suites must reside in dedicated test files inside each crate's `tests/` directory (e.g., `crates/rec-core/tests/<module>_tests.rs`) or dedicated external test modules, keeping `src/` files 100% pure production code (SRP).
 - Every functional requirement (`[REQ-...]`) must have at least one corresponding unit or integration test (`[TEST-...]`).
 - Tests must cover:
   - Happy path workflows.

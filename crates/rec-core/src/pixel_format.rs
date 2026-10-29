@@ -121,23 +121,3 @@ impl PixelFormat {
     }
 }
 
-#[cfg(test)]
-#[allow(clippy::unwrap_used)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_pixel_format_buffer_size() {
-        let rgba_size = PixelFormat::Rgba.calculate_buffer_size(1920, 1080).unwrap();
-        assert_eq!(rgba_size, 1920 * 1080 * 4);
-
-        let nv12_size = PixelFormat::Nv12.calculate_buffer_size(1920, 1080).unwrap();
-        assert_eq!(nv12_size, (1920 * 1080 * 3) / 2);
-    }
-
-    #[test]
-    fn test_zero_dimensions_error() {
-        assert!(PixelFormat::Rgba.calculate_buffer_size(0, 1080).is_err());
-        assert!(PixelFormat::Rgba.calculate_buffer_size(1920, 0).is_err());
-    }
-}

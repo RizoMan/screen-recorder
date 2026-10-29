@@ -74,7 +74,14 @@ struct EncodedFrame {
 ///
 /// Handles pre-roll trimming, volume scaling, silence gap filling for startup delays or dropouts,
 /// and container format configuration.
-fn write_synchronized_audio(
+///
+/// # Arguments
+///
+/// * `w` - Mutable reference to the destination [`AviWriter`].
+/// * `audio` - Captured [`AudioFrame`] to synchronize and write.
+/// * `video_t0` - Presentation timestamp of the first captured video frame (`T0`).
+/// * `active_config` - Shared [`AppConfig`] mutex for live volume and mute settings.
+pub fn write_synchronized_audio(
     w: &mut AviWriter,
     audio: &AudioFrame,
     video_t0: Duration,
@@ -761,58 +768,4 @@ impl Drop for RecordingPipeline {
     }
 }
 
-#[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
-mod tests {
-    use super::*;
-    use rec_core::frame::Pts;
-
-    #[test]
-    fn test_write_synchronized_audio_startup_delay() {
-        let temp_dir = std::env::temp_dir();
-        let path = temp_dir.join("test_sync_startup_delay.avi");
-        let mut writer = AviWriter::new(&path, 640, 480, 30).expect("writer creation");
-        let active_config = Arc::new(Mutex::new(AppConfig::new()));
-
-        let video_t0 = Duration::from_millis(100);
-        // Audio frame arrives with a 1.100s startup delay (PTS = 1.200s, T0 = 0.100s => timeline offset 1.100s)
-        let audio_pts = Pts::from_duration(Duration::from_millis(1200));
-        let samples = vec![0.5f32; 960]; // 10ms of 48kHz stereo (480 frames * 2)
-        let audio = AudioFrame::new(48000, 2, audio_pts, samples).expect("valid audio frame");
-
-        write_synchronized_audio(&mut writer, &audio, video_t0, &active_config);
-
-        // Container audio duration must equal 1.100s silence + 0.010s audio = 1.110s
-        let dur = writer.audio_duration();
-        let expected_min = Duration::from_millis(1105);
-        let expected_max = Duration::from_millis(1115);
-        assert!(dur >= expected_min && dur <= expected_max, "Duration was {:?}", dur);
-
-        let _ = writer.finalize();
-        let _ = std::fs::remove_file(path);
-    }
-
-    #[test]
-    fn test_write_synchronized_audio_preroll_discard() {
-        let temp_dir = std::env::temp_dir();
-        let path = temp_dir.join("test_sync_preroll.avi");
-        let mut writer = AviWriter::new(&path, 640, 480, 30).expect("writer creation");
-        let active_config = Arc::new(Mutex::new(AppConfig::new()));
-
-        let video_t0 = Duration::from_millis(500);
-        // Audio frame captured at 100ms, duration 10ms (ended at 110ms, well before video T0 500ms)
-        let audio_pts = Pts::from_duration(Duration::from_millis(100));
-        let samples = vec![0.5f32; 960];
-        let audio = AudioFrame::new(48000, 2, audio_pts, samples).expect("valid audio frame");
-
-        write_synchronized_audio(&mut writer, &audio, video_t0, &active_config);
-
-        // Pre-roll audio before video T0 must be completely discarded
-        assert_eq!(writer.audio_bytes_written(), 0);
-        assert_eq!(writer.audio_duration(), Duration::ZERO);
-
-        let _ = writer.finalize();
-        let _ = std::fs::remove_file(path);
-    }
-}
 

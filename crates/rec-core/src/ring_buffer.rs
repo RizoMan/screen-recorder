@@ -145,28 +145,3 @@ impl<T> LockFreeRingBuffer<T> {
         self.inner.lock().clear();
     }
 }
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_ring_buffer_fifo_order() {
-        let buffer = LockFreeRingBuffer::new(3);
-        buffer.push("A").unwrap();
-        buffer.push("B").unwrap();
-        assert_eq!(buffer.pop().unwrap(), "A");
-        buffer.push("C").unwrap();
-        assert_eq!(buffer.pop().unwrap(), "B");
-        assert_eq!(buffer.pop().unwrap(), "C");
-        assert!(buffer.pop().is_err());
-    }
-
-    #[test]
-    fn test_ring_buffer_overflow() {
-        let buffer = LockFreeRingBuffer::new(1);
-        assert!(buffer.push(1).is_ok());
-        assert!(matches!(buffer.push(2), Err(CoreError::BufferOverflow { capacity: 1 })));
-    }
-}

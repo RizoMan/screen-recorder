@@ -1,20 +1,16 @@
 #![windows_subsystem = "windows"]
-//! `rec-app`: Native GUI and CLI application for Screen Recorder.
+//! `rec-app`: Native GUI and CLI binary entrypoint for Screen Recorder Pro.
 //!
 //! Conforms to `[SPEC-GUI-001]` and `RULE-SAFE-001`.
-
-pub mod cli;
-pub mod gui;
-pub mod hud;
-pub mod theme;
 
 use std::error::Error;
 use eframe::egui::Vec2;
 use rec_core::config::AppConfig;
 use rec_engine::pipeline::RecordingPipeline;
 use rec_platform_windows::{WasapiAudioBackend, WgcCaptureBackend};
-use crate::cli::CliOptions;
-use crate::gui::RecorderGuiApp;
+use rec_app::cli::CliOptions;
+use rec_app::gui::RecorderGuiApp;
+use rec_app::theme;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = std::env::args().skip(1).collect();

@@ -134,16 +134,3 @@ impl CliOptions {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_cli_parsing_record_and_area() {
-        let args = ["--record", "--area", "10,20,1280,720", "--duration", "60"];
-        let opts = CliOptions::parse_from(args);
-        assert!(opts.record);
-        assert_eq!(opts.area, Some((10, 20, 1280, 720)));
-        assert_eq!(opts.duration_secs, Some(60));
-    }
-}

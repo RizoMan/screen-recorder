@@ -271,31 +271,3 @@ impl AppConfig {
         self.output_directory = path.as_ref().to_path_buf();
     }
 }
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_config_sanitization() {
-        let mut config = AppConfig {
-            fps: 1000,
-            quality_crf: 99,
-            instant_replay_duration_secs: 900,
-            ..Default::default()
-        };
-        config.sanitize();
-        assert_eq!(config.fps, 240);
-        assert_eq!(config.quality_crf, 51);
-        assert_eq!(config.instant_replay_duration_secs, 300);
-    }
-
-    #[test]
-    fn test_config_json_roundtrip() {
-        let original = AppConfig::default();
-        let json = original.to_json().unwrap();
-        let parsed = AppConfig::from_json(&json).unwrap();
-        assert_eq!(original, parsed);
-    }
-}

@@ -189,31 +189,3 @@ impl AudioMixer {
         }
     }
 }
-
-#[cfg(test)]
-#[allow(clippy::unwrap_used)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_audio_peak_calculation() {
-        let samples = vec![0.2, -0.7, 0.4, 0.1];
-        let frame = AudioFrame::new(48000, 2, Pts::from_nanos(0), samples).unwrap();
-        let (l, r) = frame.calculate_peaks();
-        assert_eq!(l, 0.4);
-        assert_eq!(r, 0.7);
-    }
-
-    #[test]
-    fn test_audio_apply_gain() {
-        let mut frame = AudioFrame::new(48000, 2, Pts::from_nanos(0), vec![0.2, -0.4]).unwrap();
-        frame.apply_gain(1.5);
-        assert!((frame.samples[0] - 0.3).abs() < 1e-5);
-        assert!((frame.samples[1] + 0.6).abs() < 1e-5);
-
-        // Clamping to 1.0 on large gain
-        frame.apply_gain(3.0);
-        assert!((frame.samples[0] - 0.9).abs() < 1e-5);
-        assert_eq!(frame.samples[1], -1.0);
-    }
-}

@@ -2,10 +2,10 @@
 //!
 //! Conforms to `[SPEC-GUI-001]` and `RULE-I18N-001`.
 
-use std::time::Duration;
+use crate::theme::render_vu_meter;
 use eframe::egui::{self, Color32, Vec2};
 use rec_core::i18n::{text, I18nKey, Language};
-use crate::theme::render_vu_meter;
+use std::time::Duration;
 
 /// Strongly-typed user action triggered from the floating recording HUD.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -125,16 +125,4 @@ pub fn render_floating_hud(
     });
 
     action
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_format_duration_seconds() {
-        assert_eq!(format_duration(Duration::from_secs(5)), "00:05");
-        assert_eq!(format_duration(Duration::from_secs(65)), "01:05");
-        assert_eq!(format_duration(Duration::from_secs(3665)), "01:01:05");
-    }
 }

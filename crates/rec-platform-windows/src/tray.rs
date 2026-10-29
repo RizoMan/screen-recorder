@@ -332,7 +332,11 @@ fn dispatch_tray_event(event: TrayEvent) {
 }
 
 /// Maps a Win32 context menu command ID to its corresponding [`TrayEvent`].
-fn handle_menu_command(cmd_id: usize) {
+///
+/// # Arguments
+///
+/// * `cmd_id` - Numeric command identifier from the Win32 popup menu (`IDM_*`).
+pub fn handle_menu_command(cmd_id: usize) {
     let event = match cmd_id {
         IDM_OPEN => Some(TrayEvent::ShowWindow),
         IDM_TOGGLE_RECORDING => Some(TrayEvent::ToggleRecording),
@@ -605,27 +609,3 @@ unsafe fn show_tray_context_menu(hwnd: HWND) {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_tray_constants_and_ids() {
-        assert_eq!(IDM_OPEN, 1001);
-        assert_eq!(IDM_TOGGLE_RECORDING, 1002);
-        assert_eq!(IDM_INSTANT_REPLAY, 1003);
-        assert_eq!(IDM_TAKE_SNAPSHOT, 1004);
-        assert_eq!(IDM_OPEN_OUTPUT_DIR, 1005);
-        assert_eq!(IDM_EXIT, 1099);
-        assert_eq!(HOTKEY_ID_F9, 2001);
-        assert_eq!(HOTKEY_ID_F10, 2002);
-        assert!(!is_exit_requested());
-    }
-
-    #[test]
-    fn test_menu_command_mapping() {
-        handle_menu_command(IDM_OPEN);
-        handle_menu_command(IDM_TAKE_SNAPSHOT);
-        handle_menu_command(IDM_OPEN_OUTPUT_DIR);
-    }
-}
