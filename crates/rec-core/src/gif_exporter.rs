@@ -219,33 +219,57 @@ impl MedianBox {
     }
 }
 
-/// Computes an adaptive 256-color palette (`768` bytes) tailored to the exact RGB colors
-/// in `rgb` using a 3D `32×32×32` histogram and perceptual Median-Cut (`[REQ-GIF-001.2]`),
-/// then maps all pixels into `indexed_out` with subtle clamped Floyd-Steinberg error diffusion.
-fn quantize_frame_adaptive(
+/// Palette index reserved for inter-frame transparency in GIF89a delta frames.
+const TRANSPARENT_INDEX: u8 = 255;
+
+/// Maximum number of opaque colors per palette (`0..=254`), reserving `255` for transparency.
+const MAX_OPAQUE_COLORS: usize = 255;
+
+/// Computes an adaptive 255-color palette (`768` bytes, indices `0..254` opaque, `255` transparent)
+/// tailored to the active RGB pixels using a 3D `32×32×32` histogram and perceptual Median-Cut (`[REQ-GIF-001.2]`).
+fn build_median_cut_palette(
     rgb: &[u8],
-    width: usize,
-    height: usize,
-    indexed_out: &mut [u8],
+    changed_mask: Option<&[u8]>,
     lut_cache: &mut [i16],
-) -> [u8; 768] {
+) -> ([u8; 768], usize) {
     const HIST_SIZE: usize = 32 * 32 * 32;
     let mut counts = vec![0u32; HIST_SIZE];
     let mut sum_r = vec![0u64; HIST_SIZE];
     let mut sum_g = vec![0u64; HIST_SIZE];
     let mut sum_b = vec![0u64; HIST_SIZE];
 
-    for chunk in rgb.chunks_exact(3) {
-        let r = chunk[0];
-        let g = chunk[1];
-        let b = chunk[2];
-        let idx = ((usize::from(r >> 3)) << 10)
-            | ((usize::from(g >> 3)) << 5)
-            | usize::from(b >> 3);
-        counts[idx] += 1;
-        sum_r[idx] += u64::from(r);
-        sum_g[idx] += u64::from(g);
-        sum_b[idx] += u64::from(b);
+    match changed_mask {
+        Some(mask) => {
+            for (chunk, &m) in rgb.chunks_exact(3).zip(mask.iter()) {
+                if m == 0 {
+                    continue;
+                }
+                let r = chunk[0];
+                let g = chunk[1];
+                let b = chunk[2];
+                let idx = ((usize::from(r >> 3)) << 10)
+                    | ((usize::from(g >> 3)) << 5)
+                    | usize::from(b >> 3);
+                counts[idx] += 1;
+                sum_r[idx] += u64::from(r);
+                sum_g[idx] += u64::from(g);
+                sum_b[idx] += u64::from(b);
+            }
+        }
+        None => {
+            for chunk in rgb.chunks_exact(3) {
+                let r = chunk[0];
+                let g = chunk[1];
+                let b = chunk[2];
+                let idx = ((usize::from(r >> 3)) << 10)
+                    | ((usize::from(g >> 3)) << 5)
+                    | usize::from(b >> 3);
+                counts[idx] += 1;
+                sum_r[idx] += u64::from(r);
+                sum_g[idx] += u64::from(g);
+                sum_b[idx] += u64::from(b);
+            }
+        }
     }
 
     let mut bins = Vec::with_capacity(4096);
@@ -265,13 +289,13 @@ fn quantize_frame_adaptive(
     }
 
     let mut palette = [0u8; 768];
+    lut_cache.fill(-1);
 
     if bins.is_empty() {
-        indexed_out.fill(0);
-        return palette;
+        return (palette, 1);
     }
 
-    let num_colors = if bins.len() <= 256 {
+    let num_colors = if bins.len() <= MAX_OPAQUE_COLORS {
         for (i, b) in bins.iter().enumerate() {
             let cnt = u64::from(b.count).max(1);
             palette[i * 3] = (b.sum_r / cnt) as u8;
@@ -280,10 +304,10 @@ fn quantize_frame_adaptive(
         }
         bins.len()
     } else {
-        let mut boxes = Vec::with_capacity(256);
+        let mut boxes = Vec::with_capacity(MAX_OPAQUE_COLORS);
         boxes.push(MedianBox::from_slice(&bins, 0, bins.len()));
 
-        while boxes.len() < 256 {
+        while boxes.len() < MAX_OPAQUE_COLORS {
             let mut best_idx = None;
             let mut best_score = 0u64;
             for (i, bx) in boxes.iter().enumerate() {
@@ -312,7 +336,6 @@ fn quantize_frame_adaptive(
                 sub.sort_unstable_by_key(|b| (b.b_bin, b.g_bin, b.r_bin));
             }
 
-            // Split near median population count, falling back to geometric midpoint
             let half_count = bx.pixel_count / 2;
             let mut acc = 0u64;
             let mut mid_offset = sub.len() / 2;
@@ -331,7 +354,7 @@ fn quantize_frame_adaptive(
             boxes.push(right_box);
         }
 
-        let colors = boxes.len().min(256);
+        let colors = boxes.len().min(MAX_OPAQUE_COLORS);
         for (i, bx) in boxes.iter().take(colors).enumerate() {
             let mut sr = 0u64;
             let mut sg = 0u64;
@@ -351,109 +374,52 @@ fn quantize_frame_adaptive(
         colors
     };
 
-    lut_cache.fill(-1);
+    (palette, num_colors.max(1))
+}
 
-    let find_nearest = |r: u8, g: u8, b: u8, lut: &mut [i16]| -> u8 {
-        let cell = ((usize::from(r >> 3)) << 10)
-            | ((usize::from(g >> 3)) << 5)
-            | usize::from(b >> 3);
-        let cached = lut[cell];
-        if cached >= 0 {
-            return cached as u8;
-        }
-
-        // Representative center of the 5-5-5 cell (or exact match check)
-        let mut best_i = 0u8;
-        let mut best_dist = u32::MAX;
-        let ri = i32::from(r);
-        let gi = i32::from(g);
-        let bi = i32::from(b);
-
-        for i in 0..num_colors {
-            let pr = i32::from(palette[i * 3]);
-            let pg = i32::from(palette[i * 3 + 1]);
-            let pb = i32::from(palette[i * 3 + 2]);
-            let dr = ri - pr;
-            let dg = gi - pg;
-            let db = bi - pb;
-            // Perceptual weighted Euclidean distance
-            let dist = (dr * dr * 3 + dg * dg * 4 + db * db * 2) as u32;
-            if dist < best_dist {
-                best_dist = dist;
-                best_i = i as u8;
-                if dist == 0 {
-                    break;
-                }
-            }
-        }
-
-        lut[cell] = i16::from(best_i);
-        best_i
-    };
-
-    // Subtle clamped Floyd-Steinberg error diffusion along scanlines
-    let mut curr_err = vec![[0i16; 3]; width + 2];
-    let mut next_err = vec![[0i16; 3]; width + 2];
-
-    for y in 0..height {
-        next_err.fill([0; 3]);
-        let row_rgb = y * width * 3;
-        let row_dst = y * width;
-
-        for x in 0..width {
-            let px = row_rgb + x * 3;
-            let r0 = rgb[px];
-            let g0 = rgb[px + 1];
-            let b0 = rgb[px + 2];
-
-            // Clamp diffused error to [-8..=8] to prevent speckle on flat desktop UI regions
-            let er_in = curr_err[x + 1][0].clamp(-8, 8);
-            let eg_in = curr_err[x + 1][1].clamp(-8, 8);
-            let eb_in = curr_err[x + 1][2].clamp(-8, 8);
-
-            let r = (i16::from(r0) + er_in).clamp(0, 255) as u8;
-            let g = (i16::from(g0) + eg_in).clamp(0, 255) as u8;
-            let b = (i16::from(b0) + eb_in).clamp(0, 255) as u8;
-
-            let p_idx = find_nearest(r, g, b, lut_cache);
-            indexed_out[row_dst + x] = p_idx;
-
-            let pr = palette[usize::from(p_idx) * 3];
-            let pg = palette[usize::from(p_idx) * 3 + 1];
-            let pb = palette[usize::from(p_idx) * 3 + 2];
-
-            // If the original pixel is already very close to the palette entry (flat UI surface),
-            // suppress error diffusion so solid colors stay 100% clean.
-            if r0.abs_diff(pr) <= 3 && g0.abs_diff(pg) <= 3 && b0.abs_diff(pb) <= 3 {
-                continue;
-            }
-
-            let er = i16::from(r) - i16::from(pr);
-            let eg = i16::from(g) - i16::from(pg);
-            let eb = i16::from(b) - i16::from(pb);
-
-            // Distribute 7/16 right, 3/16 bottom-left, 5/16 bottom, 1/16 bottom-right
-            curr_err[x + 2][0] += (er * 7) >> 4;
-            curr_err[x + 2][1] += (eg * 7) >> 4;
-            curr_err[x + 2][2] += (eb * 7) >> 4;
-
-            next_err[x][0] += (er * 3) >> 4;
-            next_err[x][1] += (eg * 3) >> 4;
-            next_err[x][2] += (eb * 3) >> 4;
-
-            next_err[x + 1][0] += (er * 5) >> 4;
-            next_err[x + 1][1] += (eg * 5) >> 4;
-            next_err[x + 1][2] += (eb * 5) >> 4;
-
-            next_err[x + 2][0] += er >> 4;
-            next_err[x + 2][1] += eg >> 4;
-            next_err[x + 2][2] += eb >> 4;
-        }
-
-        std::mem::swap(&mut curr_err, &mut next_err);
+/// Finds the closest opaque palette index (`0..num_colors`) using a 3D `32×32×32` lookup cache.
+#[inline]
+fn lookup_nearest_color(
+    r: u8,
+    g: u8,
+    b: u8,
+    palette: &[u8; 768],
+    num_colors: usize,
+    lut: &mut [i16],
+) -> u8 {
+    let cell = ((usize::from(r >> 3)) << 10)
+        | ((usize::from(g >> 3)) << 5)
+        | usize::from(b >> 3);
+    let cached = lut[cell];
+    if cached >= 0 {
+        return cached as u8;
     }
 
-    palette
+    let mut best_i = 0u8;
+    let mut best_dist = u32::MAX;
+    let ri = i32::from(r);
+    let gi = i32::from(g);
+    let bi = i32::from(b);
+
+    for i in 0..num_colors {
+        let pr = i32::from(palette[i * 3]);
+        let pg = i32::from(palette[i * 3 + 1]);
+        let pb = i32::from(palette[i * 3 + 2]);
+        let dr = ri - pr;
+        let dg = gi - pg;
+        let db = bi - pb;
+        let dist = (dr * dr * 3 + dg * dg * 4 + db * db * 2) as u32;
+        if dist < best_dist {
+            best_dist = dist;
+            best_i = i as u8;
+            if dist == 0 {
+                break;
+            }
+        }
+    }
+
+    lut[cell] = i16::from(best_i);
+    best_i
 }
 
 /// Compresses 8-bit indexed pixels using the standard GIF89a variable-width LZW algorithm.
@@ -525,23 +491,43 @@ fn lzw_encode_gif_indices(indices: &[u8], lzw_table: &mut [i16]) -> Vec<u8> {
     out
 }
 
-/// Pure safe Rust GIF89a animated image writer with per-frame adaptive 256-color palettes
-/// and RAII finalization (`[REQ-GIF-001.1]`, `[REQ-GIF-001.2]`).
+/// Buffered delta frame awaiting emission so subsequent identical frames can coalesce their `delay_cs`.
+struct PendingGifFrame {
+    delay_cs: u16,
+    left: u16,
+    top: u16,
+    width: u16,
+    height: u16,
+    local_palette: Option<[u8; 768]>,
+    compressed_lzw: Vec<u8>,
+}
+
+/// Pure safe Rust GIF89a animated image writer with adaptive 255-color Median-Cut palettes,
+/// inter-frame delta bounding-box cropping, transparency index `255`, and RAII finalization
+/// (`[REQ-GIF-001.1]`, `[REQ-GIF-001.2]`).
 pub struct GifWriter {
     writer: BufWriter<File>,
     width: u16,
     height: u16,
     delay_cs: u16,
+    loop_infinite: bool,
+    header_written: bool,
     frame_count: u32,
     is_finalized: bool,
+    global_palette: [u8; 768],
+    global_num_colors: usize,
+    global_lut_cache: Vec<i16>,
+    local_lut_cache: Vec<i16>,
+    canvas_src_rgb: Vec<u8>,
+    diff_mask: Vec<u8>,
+    confirmed_mask: Vec<u8>,
     indexed_scratch: Vec<u8>,
-    lut_cache: Vec<i16>,
     lzw_table: Vec<i16>,
+    pending_frame: Option<PendingGifFrame>,
 }
 
 impl GifWriter {
-    /// Creates a new [`GifWriter`] on disk and writes the `GIF89a` header, Logical Screen Descriptor,
-    /// and optional `NETSCAPE2.0` loop extension.
+    /// Creates a new [`GifWriter`] on disk ready to encode high-definition, delta-compressed GIF89a frames.
     ///
     /// # Arguments
     ///
@@ -591,39 +577,7 @@ impl GifWriter {
 
         let file = File::create(path.as_ref())
             .map_err(|e| CoreError::Serialization(format!("Failed to create GIF file: {}", e)))?;
-        let mut writer = BufWriter::with_capacity(256 * 1024, file);
-
-        // 1. GIF89a Header
-        writer
-            .write_all(b"GIF89a")
-            .map_err(|e| CoreError::Serialization(e.to_string()))?;
-
-        // 2. Logical Screen Descriptor (Global Color Table present for Netscape loop compatibility)
-        let mut lsd = [0u8; 7];
-        lsd[0..2].copy_from_slice(&width.to_le_bytes());
-        lsd[2..4].copy_from_slice(&height.to_le_bytes());
-        lsd[4] = 0xF7;
-        lsd[5] = 0;
-        lsd[6] = 0;
-        writer
-            .write_all(&lsd)
-            .map_err(|e| CoreError::Serialization(e.to_string()))?;
-
-        // 3. Default Global Color Table (overridden per-frame by adaptive Local Color Tables)
-        writer
-            .write_all(&[0u8; 768])
-            .map_err(|e| CoreError::Serialization(e.to_string()))?;
-
-        // 4. NETSCAPE2.0 Infinite Loop Application Extension
-        if options.loop_infinite {
-            const NETSCAPE_LOOP: [u8; 19] = [
-                0x21, 0xFF, 0x0B, b'N', b'E', b'T', b'S', b'C', b'A', b'P', b'E', b'2', b'.',
-                b'0', 0x03, 0x01, 0x00, 0x00, 0x00,
-            ];
-            writer
-                .write_all(&NETSCAPE_LOOP)
-                .map_err(|e| CoreError::Serialization(e.to_string()))?;
-        }
+        let writer = BufWriter::with_capacity(256 * 1024, file);
 
         let pixel_count = usize::from(width) * usize::from(height);
         Ok(Self {
@@ -631,16 +585,136 @@ impl GifWriter {
             width,
             height,
             delay_cs: options.frame_delay_centisecs(),
+            loop_infinite: options.loop_infinite,
+            header_written: false,
             frame_count: 0,
             is_finalized: false,
+            global_palette: [0u8; 768],
+            global_num_colors: 1,
+            global_lut_cache: vec![-1i16; 32 * 32 * 32],
+            local_lut_cache: vec![-1i16; 32 * 32 * 32],
+            canvas_src_rgb: vec![0u8; pixel_count * 3],
+            diff_mask: vec![0u8; pixel_count],
+            confirmed_mask: vec![0u8; pixel_count],
             indexed_scratch: vec![0u8; pixel_count],
-            lut_cache: vec![-1i16; 32 * 32 * 32],
             lzw_table: vec![-1i16; 4096 * 256],
+            pending_frame: None,
         })
     }
 
-    /// Resizes (using bicubic `CatmullRom` filtering when scaled), computes an adaptive 256-color
-    /// Median-Cut palette, and encodes an RGB8 buffer as a high-definition GIF89a animation frame.
+    fn ensure_header_written(&mut self) -> Result<(), CoreError> {
+        if self.header_written {
+            return Ok(());
+        }
+
+        // 1. GIF89a Header
+        self.writer
+            .write_all(b"GIF89a")
+            .map_err(|e| CoreError::Serialization(e.to_string()))?;
+
+        // 2. Logical Screen Descriptor (Global Color Table present: 0xF7 = 256 entries)
+        let mut lsd = [0u8; 7];
+        lsd[0..2].copy_from_slice(&self.width.to_le_bytes());
+        lsd[2..4].copy_from_slice(&self.height.to_le_bytes());
+        lsd[4] = 0xF7;
+        lsd[5] = TRANSPARENT_INDEX;
+        lsd[6] = 0;
+        self.writer
+            .write_all(&lsd)
+            .map_err(|e| CoreError::Serialization(e.to_string()))?;
+
+        // 3. Adaptive Global Color Table computed from Frame 0 (768 bytes)
+        self.writer
+            .write_all(&self.global_palette)
+            .map_err(|e| CoreError::Serialization(e.to_string()))?;
+
+        // 4. NETSCAPE2.0 Infinite Loop Application Extension
+        if self.loop_infinite {
+            const NETSCAPE_LOOP: [u8; 19] = [
+                0x21, 0xFF, 0x0B, b'N', b'E', b'T', b'S', b'C', b'A', b'P', b'E', b'2', b'.',
+                b'0', 0x03, 0x01, 0x00, 0x00, 0x00,
+            ];
+            self.writer
+                .write_all(&NETSCAPE_LOOP)
+                .map_err(|e| CoreError::Serialization(e.to_string()))?;
+        }
+
+        self.header_written = true;
+        Ok(())
+    }
+
+    fn flush_pending_frame(&mut self) -> Result<(), CoreError> {
+        let Some(frame) = self.pending_frame.take() else {
+            return Ok(());
+        };
+
+        self.ensure_header_written()?;
+
+        // 1. Graphic Control Extension (8 bytes)
+        // Packed byte 0x05 = Disposal Method 1 (Do Not Dispose: 0x04) | Transparent Color Flag (0x01)
+        let delay_bytes = frame.delay_cs.to_le_bytes();
+        let gce: [u8; 8] = [
+            0x21,
+            0xF9,
+            0x04,
+            0x05,
+            delay_bytes[0],
+            delay_bytes[1],
+            TRANSPARENT_INDEX,
+            0x00,
+        ];
+        self.writer
+            .write_all(&gce)
+            .map_err(|e| CoreError::Serialization(e.to_string()))?;
+
+        // 2. Image Descriptor (10 bytes) with sub-rectangle coordinates (left, top, width, height)
+        let mut img_desc = [0u8; 10];
+        img_desc[0] = 0x2C;
+        img_desc[1..3].copy_from_slice(&frame.left.to_le_bytes());
+        img_desc[3..5].copy_from_slice(&frame.top.to_le_bytes());
+        img_desc[5..7].copy_from_slice(&frame.width.to_le_bytes());
+        img_desc[7..9].copy_from_slice(&frame.height.to_le_bytes());
+        img_desc[9] = if frame.local_palette.is_some() {
+            0x87 // Local Color Table present (256 entries)
+        } else {
+            0x00 // Use Global Color Table (saves 768 bytes per frame)
+        };
+        self.writer
+            .write_all(&img_desc)
+            .map_err(|e| CoreError::Serialization(e.to_string()))?;
+
+        // 3. Optional Per-Frame Adaptive Local Color Table (only when scene colors shift)
+        if let Some(ref local_pal) = frame.local_palette {
+            self.writer
+                .write_all(local_pal)
+                .map_err(|e| CoreError::Serialization(e.to_string()))?;
+        }
+
+        // 4. LZW Minimum Code Size (8) + Sub-blocks
+        self.writer
+            .write_all(&[8u8])
+            .map_err(|e| CoreError::Serialization(e.to_string()))?;
+
+        for chunk in frame.compressed_lzw.chunks(255) {
+            self.writer
+                .write_all(&[chunk.len() as u8])
+                .map_err(|e| CoreError::Serialization(e.to_string()))?;
+            self.writer
+                .write_all(chunk)
+                .map_err(|e| CoreError::Serialization(e.to_string()))?;
+        }
+
+        // Sub-block terminator
+        self.writer
+            .write_all(&[0u8])
+            .map_err(|e| CoreError::Serialization(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Resizes (using bicubic `CatmullRom` filtering when scaled), applies inter-frame delta
+    /// bounding-box cropping and MJPEG noise suppression, and encodes an RGB8 buffer as a
+    /// high-definition GIF89a animation frame.
     ///
     /// # Arguments
     ///
@@ -650,7 +724,7 @@ impl GifWriter {
     ///
     /// # Returns
     ///
-    /// `Ok(())` when the compressed frame is written.
+    /// `Ok(())` when the frame is processed.
     ///
     /// # Errors
     ///
@@ -673,31 +747,299 @@ impl GifWriter {
         let dst_w = u32::from(self.width);
         let dst_h = u32::from(self.height);
 
-        let local_palette = if src_width == dst_w && src_height == dst_h {
-            quantize_frame_adaptive(
-                &rgb[..expected],
-                dst_w as usize,
-                dst_h as usize,
-                &mut self.indexed_scratch,
-                &mut self.lut_cache,
-            )
+        if src_width == dst_w && src_height == dst_h {
+            self.encode_scaled_rgb_frame(&rgb[..expected])
         } else {
             let src_img = RgbImage::from_raw(src_width, src_height, rgb[..expected].to_vec())
                 .ok_or_else(|| {
-                    CoreError::Serialization("Failed to construct RGB image for scaling".to_string())
+                    CoreError::Serialization(
+                        "Failed to construct RGB image for scaling".to_string(),
+                    )
                 })?;
             // Bicubic CatmullRom preserves crisp text and 1px UI lines during downscaling
             let resized = resize(&src_img, dst_w, dst_h, FilterType::CatmullRom);
-            quantize_frame_adaptive(
-                resized.as_raw(),
-                dst_w as usize,
-                dst_h as usize,
-                &mut self.indexed_scratch,
-                &mut self.lut_cache,
-            )
+            self.encode_scaled_rgb_frame(resized.as_raw())
+        }
+    }
+
+    fn encode_scaled_rgb_frame(&mut self, rgb: &[u8]) -> Result<(), CoreError> {
+        let w = usize::from(self.width);
+        let h = usize::from(self.height);
+        let pixel_count = w * h;
+
+        if self.frame_count == 0 {
+            // Frame 0 (Keyframe): build the Global Color Table (255 adaptive colors + transparent 255)
+            let (pal, num_colors) =
+                build_median_cut_palette(rgb, None, &mut self.global_lut_cache);
+            self.global_palette = pal;
+            self.global_num_colors = num_colors;
+            self.canvas_src_rgb.copy_from_slice(&rgb[..pixel_count * 3]);
+
+            // Quantize full frame with Horizontal Run-Length Stabilization (<= 4 RGB deadzone)
+            for y in 0..h {
+                let row_px = y * w;
+                let mut prev_idx: u8 = TRANSPARENT_INDEX;
+                for x in 0..w {
+                    let i = row_px + x;
+                    let r = rgb[i * 3];
+                    let g = rgb[i * 3 + 1];
+                    let b = rgb[i * 3 + 2];
+
+                    let chosen = if prev_idx < TRANSPARENT_INDEX {
+                        let p_base = usize::from(prev_idx) * 3;
+                        let pr = self.global_palette[p_base];
+                        let pg = self.global_palette[p_base + 1];
+                        let pb = self.global_palette[p_base + 2];
+                        if r.abs_diff(pr) <= 4 && g.abs_diff(pg) <= 4 && b.abs_diff(pb) <= 4 {
+                            prev_idx
+                        } else {
+                            lookup_nearest_color(
+                                r,
+                                g,
+                                b,
+                                &self.global_palette,
+                                self.global_num_colors,
+                                &mut self.global_lut_cache,
+                            )
+                        }
+                    } else {
+                        lookup_nearest_color(
+                            r,
+                            g,
+                            b,
+                            &self.global_palette,
+                            self.global_num_colors,
+                            &mut self.global_lut_cache,
+                        )
+                    };
+
+                    self.indexed_scratch[i] = chosen;
+                    prev_idx = chosen;
+                }
+            }
+
+            let compressed_lzw =
+                lzw_encode_gif_indices(&self.indexed_scratch[..pixel_count], &mut self.lzw_table);
+            self.pending_frame = Some(PendingGifFrame {
+                delay_cs: self.delay_cs,
+                left: 0,
+                top: 0,
+                width: self.width,
+                height: self.height,
+                local_palette: None,
+                compressed_lzw,
+            });
+            self.frame_count = 1;
+            return Ok(());
+        }
+
+        // Subsequent frames: two-threshold temporal/spatial hysteresis filter to reject MJPEG noise
+        for i in 0..pixel_count {
+            let base = i * 3;
+            let dr = rgb[base].abs_diff(self.canvas_src_rgb[base]);
+            let dg = rgb[base + 1].abs_diff(self.canvas_src_rgb[base + 1]);
+            let db = rgb[base + 2].abs_diff(self.canvas_src_rgb[base + 2]);
+            let max_d = dr.max(dg).max(db);
+            self.diff_mask[i] = if max_d <= 6 {
+                0
+            } else if max_d <= 18 {
+                1
+            } else {
+                2
+            };
+        }
+
+        let mut min_x = w;
+        let mut max_x = 0usize;
+        let mut min_y = h;
+        let mut max_y = 0usize;
+        let mut changed_count = 0usize;
+
+        for y in 0..h {
+            let row = y * w;
+            for x in 0..w {
+                let i = row + x;
+                let dm = self.diff_mask[i];
+                let confirmed = if dm == 2 {
+                    true
+                } else if dm == 1 {
+                    let left_ok = x > 0 && self.diff_mask[i - 1] >= 1;
+                    let right_ok = x + 1 < w && self.diff_mask[i + 1] >= 1;
+                    let up_ok = y > 0 && self.diff_mask[i - w] >= 1;
+                    let down_ok = y + 1 < h && self.diff_mask[i + w] >= 1;
+                    left_ok || right_ok || up_ok || down_ok
+                } else {
+                    false
+                };
+
+                if confirmed {
+                    self.confirmed_mask[i] = 1;
+                    min_x = min_x.min(x);
+                    max_x = max_x.max(x);
+                    min_y = min_y.min(y);
+                    max_y = max_y.max(y);
+                    changed_count += 1;
+                } else {
+                    self.confirmed_mask[i] = 0;
+                }
+            }
+        }
+
+        // Zero-byte frame deduplication: if no pixels changed, coalesce delay_cs into pending frame
+        if changed_count == 0 {
+            if let Some(ref mut pending) = self.pending_frame {
+                pending.delay_cs = pending.delay_cs.saturating_add(self.delay_cs);
+            }
+            self.frame_count += 1;
+            return Ok(());
+        }
+
+        // Flush previous pending frame before encoding the new delta bounding box
+        self.flush_pending_frame()?;
+
+        let sub_w = max_x - min_x + 1;
+        let sub_h = max_y - min_y + 1;
+
+        // Evaluate whether the Global Color Table represents the changed pixels accurately
+        let mut high_error_pixels = 0usize;
+        for y in min_y..=max_y {
+            let row = y * w;
+            for x in min_x..=max_x {
+                let i = row + x;
+                if self.confirmed_mask[i] == 0 {
+                    continue;
+                }
+                let r = rgb[i * 3];
+                let g = rgb[i * 3 + 1];
+                let b = rgb[i * 3 + 2];
+                let idx = lookup_nearest_color(
+                    r,
+                    g,
+                    b,
+                    &self.global_palette,
+                    self.global_num_colors,
+                    &mut self.global_lut_cache,
+                );
+                let p_base = usize::from(idx) * 3;
+                let err = r
+                    .abs_diff(self.global_palette[p_base])
+                    .max(g.abs_diff(self.global_palette[p_base + 1]))
+                    .max(b.abs_diff(self.global_palette[p_base + 2]));
+                if err > 20 {
+                    high_error_pixels += 1;
+                }
+            }
+        }
+
+        // Build an on-demand adaptive Local Color Table only if > 5% of changed pixels have error > 20
+        let local_palette_opt = if high_error_pixels * 20 > changed_count {
+            let (local_pal, local_num) = build_median_cut_palette(
+                rgb,
+                Some(&self.confirmed_mask),
+                &mut self.local_lut_cache,
+            );
+            Some((local_pal, local_num))
+        } else {
+            None
         };
 
-        self.write_indexed_frame(&local_palette)
+        // Quantize the cropped sub-rectangle with TRANSPARENT_INDEX (255) for unchanged pixels
+        let mut out_pos = 0usize;
+        for y in min_y..=max_y {
+            let row = y * w;
+            let mut prev_idx: u8 = TRANSPARENT_INDEX;
+            for x in min_x..=max_x {
+                let i = row + x;
+                if self.confirmed_mask[i] == 0 {
+                    self.indexed_scratch[out_pos] = TRANSPARENT_INDEX;
+                    prev_idx = TRANSPARENT_INDEX;
+                    out_pos += 1;
+                    continue;
+                }
+
+                let r = rgb[i * 3];
+                let g = rgb[i * 3 + 1];
+                let b = rgb[i * 3 + 2];
+
+                // Update reference canvas state for this changed pixel
+                self.canvas_src_rgb[i * 3] = r;
+                self.canvas_src_rgb[i * 3 + 1] = g;
+                self.canvas_src_rgb[i * 3 + 2] = b;
+
+                let chosen = match local_palette_opt {
+                    Some((ref pal, num_c)) => {
+                        if prev_idx < TRANSPARENT_INDEX {
+                            let p_base = usize::from(prev_idx) * 3;
+                            if r.abs_diff(pal[p_base]) <= 4
+                                && g.abs_diff(pal[p_base + 1]) <= 4
+                                && b.abs_diff(pal[p_base + 2]) <= 4
+                            {
+                                prev_idx
+                            } else {
+                                lookup_nearest_color(
+                                    r,
+                                    g,
+                                    b,
+                                    pal,
+                                    num_c,
+                                    &mut self.local_lut_cache,
+                                )
+                            }
+                        } else {
+                            lookup_nearest_color(r, g, b, pal, num_c, &mut self.local_lut_cache)
+                        }
+                    }
+                    None => {
+                        if prev_idx < TRANSPARENT_INDEX {
+                            let p_base = usize::from(prev_idx) * 3;
+                            if r.abs_diff(self.global_palette[p_base]) <= 4
+                                && g.abs_diff(self.global_palette[p_base + 1]) <= 4
+                                && b.abs_diff(self.global_palette[p_base + 2]) <= 4
+                            {
+                                prev_idx
+                            } else {
+                                lookup_nearest_color(
+                                    r,
+                                    g,
+                                    b,
+                                    &self.global_palette,
+                                    self.global_num_colors,
+                                    &mut self.global_lut_cache,
+                                )
+                            }
+                        } else {
+                            lookup_nearest_color(
+                                r,
+                                g,
+                                b,
+                                &self.global_palette,
+                                self.global_num_colors,
+                                &mut self.global_lut_cache,
+                            )
+                        }
+                    }
+                };
+
+                self.indexed_scratch[out_pos] = chosen;
+                prev_idx = chosen;
+                out_pos += 1;
+            }
+        }
+
+        let compressed_lzw =
+            lzw_encode_gif_indices(&self.indexed_scratch[..out_pos], &mut self.lzw_table);
+        self.pending_frame = Some(PendingGifFrame {
+            delay_cs: self.delay_cs,
+            left: min_x as u16,
+            top: min_y as u16,
+            width: sub_w as u16,
+            height: sub_h as u16,
+            local_palette: local_palette_opt.map(|(pal, _)| pal),
+            compressed_lzw,
+        });
+
+        self.frame_count += 1;
+        Ok(())
     }
 
     /// Converts, scales with bicubic `CatmullRom` filtering, and encodes a [`VideoFrame`] (`Rgba` or `Bgra`)
@@ -736,73 +1078,19 @@ impl GifWriter {
         self.write_rgb_frame(&rgb, src_w, src_h)
     }
 
-    fn write_indexed_frame(&mut self, local_palette: &[u8; 768]) -> Result<(), CoreError> {
-        // 1. Graphic Control Extension (8 bytes)
-        let delay_bytes = self.delay_cs.to_le_bytes();
-        let gce: [u8; 8] = [
-            0x21,
-            0xF9,
-            0x04,
-            0x04, // Disposal method 1 (Do Not Dispose)
-            delay_bytes[0],
-            delay_bytes[1],
-            0x00,
-            0x00,
-        ];
-        self.writer
-            .write_all(&gce)
-            .map_err(|e| CoreError::Serialization(e.to_string()))?;
-
-        // 2. Image Descriptor (10 bytes) with Local Color Table Flag enabled (0x87 = 256 local colors)
-        let mut img_desc = [0u8; 10];
-        img_desc[0] = 0x2C;
-        img_desc[5..7].copy_from_slice(&self.width.to_le_bytes());
-        img_desc[7..9].copy_from_slice(&self.height.to_le_bytes());
-        img_desc[9] = 0x87;
-        self.writer
-            .write_all(&img_desc)
-            .map_err(|e| CoreError::Serialization(e.to_string()))?;
-
-        // 3. Per-Frame Adaptive Local Color Table (768 bytes)
-        self.writer
-            .write_all(local_palette)
-            .map_err(|e| CoreError::Serialization(e.to_string()))?;
-
-        // 4. LZW Minimum Code Size (8) + Sub-blocks
-        self.writer
-            .write_all(&[8u8])
-            .map_err(|e| CoreError::Serialization(e.to_string()))?;
-
-        let compressed = lzw_encode_gif_indices(&self.indexed_scratch, &mut self.lzw_table);
-        for chunk in compressed.chunks(255) {
-            self.writer
-                .write_all(&[chunk.len() as u8])
-                .map_err(|e| CoreError::Serialization(e.to_string()))?;
-            self.writer
-                .write_all(chunk)
-                .map_err(|e| CoreError::Serialization(e.to_string()))?;
-        }
-
-        // Sub-block terminator
-        self.writer
-            .write_all(&[0u8])
-            .map_err(|e| CoreError::Serialization(e.to_string()))?;
-
-        self.frame_count += 1;
-        Ok(())
-    }
-
-    /// Writes the GIF89a trailer (`0x3B`) and flushes all buffered data to disk.
+    /// Flushes any pending delta frame, writes the GIF89a trailer (`0x3B`), and flushes all buffered data to disk.
     ///
     /// # Returns
     ///
-    /// Total number of animation frames written.
+    /// Total number of animation frames processed.
     ///
     /// # Errors
     ///
     /// Returns [`CoreError::Serialization`] if flushing fails.
     pub fn finalize(&mut self) -> Result<u32, CoreError> {
         if !self.is_finalized {
+            self.ensure_header_written()?;
+            self.flush_pending_frame()?;
             self.writer
                 .write_all(&[0x3B])
                 .map_err(|e| CoreError::Serialization(e.to_string()))?;
@@ -1075,5 +1363,71 @@ mod tests {
         assert_eq!(GifScale::Scale50.percent(), 50);
         assert_eq!(GifScale::Scale75.percent(), 75);
         assert_eq!(GifScale::Scale100.percent(), 100);
+    }
+
+    /// Verifies `[TEST-GIF-001.4]`: Inter-frame delta sub-rectangle cropping and transparency index `255`
+    /// produce a `.gif` smaller than the source `.avi` on typical screen recordings.
+    #[test]
+    fn test_gif_delta_compression_smaller_than_avi() {
+        let temp_dir = std::env::temp_dir();
+        let avi_path = temp_dir.join("test_delta_ratio_src.avi");
+        let gif_path = temp_dir.join("test_delta_ratio_out.gif");
+
+        let w = 640u32;
+        let h = 360u32;
+        let mut avi = AviWriter::new(&avi_path, w, h, 30).unwrap();
+        let desc = FrameDescriptor::new(w, h, PixelFormat::Rgba).unwrap();
+
+        for f in 0..30u32 {
+            let mut pixels = vec![0u8; desc.required_buffer_size()];
+            // Realistic desktop UI background + top header + moving cursor indicator
+            let cursor_x = 60 + f * 12;
+            let cursor_y = 100 + f * 4;
+            for y in 0..h {
+                for x in 0..w {
+                    let i = ((y * w + x) * 4) as usize;
+                    if (x >= cursor_x && x < cursor_x + 24) && (y >= cursor_y && y < cursor_y + 24)
+                    {
+                        pixels[i] = 255;
+                        pixels[i + 1] = 214;
+                        pixels[i + 2] = 10;
+                        pixels[i + 3] = 255;
+                    } else if y < 40 {
+                        pixels[i] = 30;
+                        pixels[i + 1] = 36;
+                        pixels[i + 2] = 48;
+                        pixels[i + 3] = 255;
+                    } else {
+                        pixels[i] = 15;
+                        pixels[i + 1] = 18;
+                        pixels[i + 2] = 24;
+                        pixels[i + 3] = 255;
+                    }
+                }
+            }
+            let frame = VideoFrame::new(
+                desc.clone(),
+                Pts::from_nanos(u64::from(f) * 33_333_333),
+                pixels,
+            )
+            .unwrap();
+            avi.write_frame(&frame).unwrap();
+        }
+        avi.finalize().unwrap();
+
+        let opts = GifExportOptions::new(20, GifScale::Scale100, 10);
+        export_avi_to_gif(&avi_path, &gif_path, opts).unwrap();
+
+        let avi_size = std::fs::metadata(&avi_path).unwrap().len();
+        let gif_size = std::fs::metadata(&gif_path).unwrap().len();
+        assert!(
+            gif_size < avi_size,
+            "Expected delta-compressed GIF ({} bytes) to be smaller than source AVI ({} bytes)",
+            gif_size,
+            avi_size
+        );
+
+        let _ = std::fs::remove_file(avi_path);
+        let _ = std::fs::remove_file(gif_path);
     }
 }

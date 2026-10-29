@@ -13,11 +13,12 @@ This specification defines the architecture, domain models, quantization/LZW alg
 
 ## 2. Functional Requirements (`[REQ-GIF-001]`)
 
-- **`[REQ-GIF-001.1]` Pure Safe Rust GIF89a Encoder**:
-  - Implement a 100% memory-safe (`#![forbid(unsafe_code)]`) GIF89a encoder in `rec-core::gif_exporter` producing standards-compliant `.gif` files with `GIF89a` header, Logical Screen Descriptor, per-frame 256-color Adaptive Local Color Tables, `NETSCAPE2.0` Application Extension for infinite looping, Graphic Control Extensions for frame timing, and LZW-compressed image data sub-blocks.
-- **`[REQ-GIF-001.2]` Adaptive Median-Cut Palette Quantization, Clamped Floyd-Steinberg Dithering & Bicubic Resampling**:
-  - Compute a per-frame 256-color adaptive palette via 3D histogram (`32×32×32`) Median-Cut with exact 8-bit RGB centroid averaging, accelerated by a 3D nearest-neighbor lookup table (`32,768` entries) and subtle clamped Floyd-Steinberg error diffusion.
-  - Perform resolution scaling using `image::imageops::FilterType::CatmullRom` bicubic resampling to preserve crisp typography and UI edges, defaulting to `GifScale::Scale100` (full native resolution).
+- **`[REQ-GIF-001.1]` Pure Safe Rust GIF89a Encoder with Adaptive Global & On-Demand Local Palettes**:
+  - Implement a 100% memory-safe (`#![forbid(unsafe_code)]`) GIF89a encoder in `rec-core::gif_exporter` producing standards-compliant `.gif` files with `GIF89a` header, Logical Screen Descriptor, a 255-color Adaptive Median-Cut Global Color Table (index `255` reserved for inter-frame transparency) with on-demand Local Color Table fallback when scene colors shift, `NETSCAPE2.0` Application Extension for infinite looping, Graphic Control Extensions (`Disposal Method 1: Do Not Dispose` + `Transparent Color Index = 255`), and LZW-compressed image data sub-blocks.
+- **`[REQ-GIF-001.2]` Inter-Frame Delta Sub-Rectangle Cropping, Temporal MJPEG Denoising & Run-Stabilized Quantization**:
+  - Track the displayed canvas state across frames and apply a two-threshold spatial/temporal hysteresis filter (`\Delta <= 6` unchanged, `6 < \Delta <= 18` confirmed by orthogonal neighbors, `\Delta > 18` definite change) to suppress Motion-JPEG mosquito noise on static regions.
+  - Crop each subsequent frame's GIF89a Image Descriptor (`left, top, sub_width, sub_height`) to the tight dirty bounding box of changed pixels, encoding unchanged pixels inside the bounding box as `TRANSPARENT_INDEX (255)` and coalescing identical frames by accumulating `delay_cs` with zero extra bytes.
+  - Stabilize horizontal palette index runs (`max_channel_diff <= 4`) to maximize LZW dictionary compression without sacrificing sharp UI typography, and perform resolution scaling using `image::imageops::FilterType::CatmullRom` bicubic resampling.
 - **`[REQ-GIF-001.3]` Configurable Scale, Frame Rate & Duration Window**:
   - Support export resolution scaling via `GifScale` (`Scale50` = 50%, `Scale75` = 75%, `Scale100` = 100%), target frame rate (`10`, `15`, or `30` FPS), and maximum clip duration (`5` to `15` seconds, default `10` seconds) in `AppConfig`.
 - **`[REQ-GIF-001.4]` Direct AVI-to-GIF Conversion (`export_avi_to_gif`)**:
@@ -72,4 +73,5 @@ pub struct GifExportOptions {
 | `[TEST-GIF-001.1]` | `test_gif_encoder_valid_header_and_trailer` | Verifies `GIF89a` header, `NETSCAPE2.0` loop block, LZW sub-blocks, and `0x3B` trailer on synthetic RGBA frames. |
 | `[TEST-GIF-001.2]` | `test_export_avi_to_gif_end_to_end` | Records a multi-frame `.avi` file via `AviWriter` and converts it to `.gif` via `export_avi_to_gif`, verifying non-empty valid GIF89a output and scaled dimensions. |
 | `[TEST-GIF-001.3]` | `test_gif_scale_dimensions` | Verifies `GifScale::Scale50`, `Scale75`, and `Scale100` dimension calculations and clamping. |
+| `[TEST-GIF-001.4]` | `test_gif_delta_compression_smaller_than_avi` | Verifies that a multi-frame screen-recording `.avi` with static UI + localized motion exports to a `.gif` significantly smaller than the `.avi` container. |
 
