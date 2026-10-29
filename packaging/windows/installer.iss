@@ -2,7 +2,7 @@
 ; Conforms to [RULE-PKG-001]
 
 #define MyAppName "Screen Recorder Pro"
-#define MyAppVersion "0.1.25"
+#define MyAppVersion "0.1.26"
 #define MyAppPublisher "Screen Recorder Team"
 #define MyAppURL "https://github.com/screenrecorder/screen-recorder"
 #define MyAppExeName "rec-app.exe"
