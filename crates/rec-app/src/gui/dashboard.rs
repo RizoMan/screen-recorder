@@ -600,6 +600,7 @@ impl RecorderGuiApp {
         let mut should_play = false;
         let mut should_open_folder = false;
         let mut should_export_gif = false;
+        let mut should_open_trim = false;
 
         if let Some(ref meta) = self.last_recording {
             card_frame().show(ui, |ui| {
@@ -714,6 +715,18 @@ impl RecorderGuiApp {
                             if ui.add(gif_btn).clicked() {
                                 should_export_gif = true;
                             }
+
+                            let trim_btn = egui::Button::new(
+                                RichText::new(format!("✂ {}", text(I18nKey::BtnQuickTrim, lang)))
+                                    .size(12.0)
+                                    .strong()
+                                    .color(Color32::WHITE),
+                            )
+                            .fill(COLOR_RUST_ORANGE)
+                            .corner_radius(CornerRadius::same(6));
+                            if ui.add(trim_btn).clicked() {
+                                should_open_trim = true;
+                            }
                         }
 
                         let play_btn = egui::Button::new(
@@ -734,6 +747,10 @@ impl RecorderGuiApp {
 
         if should_export_gif {
             self.export_last_recording_to_gif();
+        }
+
+        if should_open_trim {
+            self.open_quick_trim_modal();
         }
 
         if should_delete {

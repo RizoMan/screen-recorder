@@ -43,8 +43,8 @@ Para alcanzar el máximo valor de producto comercial con calidad de grado profes
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │ NIVEL 2: QUICK WINS DE ALTO VALOR VISUAL (Baja Complejidad, Gran Salto de UX)   │
 │ • Halo visual de cursor y animación de ondas expansivas en clics [COMPLETADO v0.1.20]│
-│ • Exportación rápida de clips a formato GIF animado HD (5–15s) [COMPLETADO v0.1.23]  │
-│ • Herramienta "Quick Trim" (recorte sin recodificación de inicio y fin de video) │
+│ • Exportación rápida de clips a formato GIF animado HD (5–15s) [COMPLETADO v0.1.25]  │
+│ • Herramienta "Quick Trim" (recorte sin recodificación de inicio y fin) [COMPLETADO v0.1.27]│
 │ • Visualizador de teclas presionadas en vivo (Keycaster flotante)                │
 └────────────────────────────────────────┬─────────────────────────────────────────┘
                                          ▼

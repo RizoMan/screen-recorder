@@ -10,6 +10,7 @@
 pub mod dashboard;
 pub mod models;
 pub mod settings;
+pub mod trim_modal;
 
 use std::path::PathBuf;
 use eframe::egui;
@@ -29,7 +30,7 @@ use crate::theme::configure_obsidian_theme;
 
 pub use self::models::{
     default_monitor_label, format_file_size, AppTab, CaptureMode, ContainerFormat, EncoderChoice,
-    RateControlMode, RecentMediaKind, RecentRecordingMeta, SettingsCategory,
+    QuickTrimModalState, RateControlMode, RecentMediaKind, RecentRecordingMeta, SettingsCategory,
 };
 
 /// Native desktop recorder application controller conforming to `[CONTRACT-GUI-001]`.
@@ -60,6 +61,7 @@ pub struct RecorderGuiApp {
     pub(crate) rate_control: RateControlMode,
     pub(crate) target_bitrate_kbps: u32,
     pub(crate) nvenc_preset: u8,
+    pub(crate) trim_modal: Option<QuickTrimModalState>,
 }
 
 impl RecorderGuiApp {
@@ -136,6 +138,7 @@ impl RecorderGuiApp {
             rate_control: RateControlMode::Cbr,
             target_bitrate_kbps: 12_000,
             nvenc_preset: 7,
+            trim_modal: None,
         }
     }
 
@@ -441,6 +444,8 @@ impl eframe::App for RecorderGuiApp {
             AppTab::Dashboard => self.render_dashboard(ui, lang),
             AppTab::Settings => self.render_settings_modal(ui, lang),
         });
+
+        self.render_quick_trim_modal(&ctx, lang);
 
         if self.hud_state.is_recording {
             ctx.request_repaint_after(std::time::Duration::from_millis(33));

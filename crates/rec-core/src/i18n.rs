@@ -280,6 +280,24 @@ pub enum I18nKey {
     GifFpsLabel,
     /// Label for GIF maximum clip duration slider.
     GifMaxDurationLabel,
+    /// Button label to open the lossless Quick Trim modal on a recent video recording.
+    BtnQuickTrim,
+    /// Title of the Quick Trim modal dialog.
+    TrimModalTitle,
+    /// Subtitle/description of the Quick Trim modal dialog.
+    TrimModalSubtitle,
+    /// Label for the In Point (start timestamp) slider.
+    TrimInPointLabel,
+    /// Label for the Out Point (end timestamp) slider.
+    TrimOutPointLabel,
+    /// Label for the resulting trimmed duration indicator.
+    TrimSelectedDurationLabel,
+    /// Button label to execute and save the lossless trim.
+    BtnSaveTrim,
+    /// Button label to cancel and close the Quick Trim modal.
+    BtnCancelTrim,
+    /// Status notification when a trimmed video clip is saved.
+    StatusTrimSaved,
 }
 
 impl I18nKey {
@@ -407,6 +425,15 @@ impl I18nKey {
             I18nKey::GifScaleLabel,
             I18nKey::GifFpsLabel,
             I18nKey::GifMaxDurationLabel,
+            I18nKey::BtnQuickTrim,
+            I18nKey::TrimModalTitle,
+            I18nKey::TrimModalSubtitle,
+            I18nKey::TrimInPointLabel,
+            I18nKey::TrimOutPointLabel,
+            I18nKey::TrimSelectedDurationLabel,
+            I18nKey::BtnSaveTrim,
+            I18nKey::BtnCancelTrim,
+            I18nKey::StatusTrimSaved,
         ]
     }
 }
@@ -556,6 +583,15 @@ pub fn text(key: I18nKey, lang: Language) -> &'static str {
             I18nKey::GifScaleLabel => "GIF Resolution Scale",
             I18nKey::GifFpsLabel => "GIF Frame Rate",
             I18nKey::GifMaxDurationLabel => "Max GIF Clip Duration",
+            I18nKey::BtnQuickTrim => "Quick Trim",
+            I18nKey::TrimModalTitle => "✂ Quick Trim (Lossless Stream Copy)",
+            I18nKey::TrimModalSubtitle => "Cut the start and end of your recording instantly without re-encoding or quality loss.",
+            I18nKey::TrimInPointLabel => "Start Point (In)",
+            I18nKey::TrimOutPointLabel => "End Point (Out)",
+            I18nKey::TrimSelectedDurationLabel => "Trimmed Clip Duration:",
+            I18nKey::BtnSaveTrim => "✂ Save Trimmed Clip",
+            I18nKey::BtnCancelTrim => "Cancel",
+            I18nKey::StatusTrimSaved => "✓ Trimmed video clip saved (lossless copy)",
         },
         Language::Spanish => match key {
             I18nKey::AppTitle => "Screen Recorder Pro",
@@ -678,6 +714,15 @@ pub fn text(key: I18nKey, lang: Language) -> &'static str {
             I18nKey::GifScaleLabel => "Escala de Resolución GIF",
             I18nKey::GifFpsLabel => "Cuadros por Segundo (FPS GIF)",
             I18nKey::GifMaxDurationLabel => "Duración Máxima del Clip GIF",
+            I18nKey::BtnQuickTrim => "Recortar",
+            I18nKey::TrimModalTitle => "✂ Recorte Rápido (Copia Directa Sin Pérdida)",
+            I18nKey::TrimModalSubtitle => "Recorta el inicio y el final de tu grabación al instante sin recodificar ni perder calidad.",
+            I18nKey::TrimInPointLabel => "Punto de Entrada (Inicio)",
+            I18nKey::TrimOutPointLabel => "Punto de Salida (Fin)",
+            I18nKey::TrimSelectedDurationLabel => "Duración del Recorte:",
+            I18nKey::BtnSaveTrim => "✂ Guardar Clip Recortado",
+            I18nKey::BtnCancelTrim => "Cancelar",
+            I18nKey::StatusTrimSaved => "✓ Clip recortado guardado (copia sin pérdida)",
         },
     }
 }

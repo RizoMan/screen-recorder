@@ -150,4 +150,5 @@ El proyecto se rige de manera inviolable por **SPEC-DRIVEN DEVELOPMENT (SDD)**, 
 | `[SPEC-FEAT-REPLAY-001]` | `specs/04_features/01_instant_replay_buffer.spec.md` | Buffer circular de repetición instantánea en memoria |
 | `[SPEC-FEAT-CURSOR-001]` | `specs/04_features/02_smart_cursor_effects.spec.md` | Efectos inteligentes de cursor (Halo y ondas de clic) |
 | `[SPEC-FEAT-GIF-001]` | `specs/04_features/03_animated_gif_export.spec.md` | Exportación rápida de clips a formato GIF animado HD |
+| `[SPEC-FEAT-TRIM-001]` | `specs/04_features/04_quick_trim_editor.spec.md` | Recorte rápido sin recodificación (Quick Trim In/Out) |
 | `[SPEC-QA-001]` | `specs/05_qa/manual_qa_playbook.spec.md` | Matriz de pruebas manuales, estabilidad y verificación de audio/video |

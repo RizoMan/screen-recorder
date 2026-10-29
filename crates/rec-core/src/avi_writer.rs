@@ -453,6 +453,45 @@ impl AviWriter {
             pcm_bytes.extend_from_slice(&s_i16.to_le_bytes());
         }
 
+        self.write_raw_pcm_chunk(&pcm_bytes)
+    }
+
+    /// Appends a pre-formatted 16-bit little-endian PCM audio byte slice directly as a `01wb` chunk (`[REQ-TRIM-001.3]`).
+    ///
+    /// # Arguments
+    ///
+    /// * `pcm_bytes` - Raw 16-bit little-endian PCM audio bytes.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` when the chunk is written and indexed.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError`] if the container is already finalized or on file I/O failure.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use rec_core::avi_writer::AviWriter;
+    ///
+    /// let temp_path = std::env::temp_dir().join("doctest_raw_pcm.avi");
+    /// let mut writer = AviWriter::new(&temp_path, 64, 48, 30).unwrap();
+    /// writer.write_raw_pcm_chunk(&[0u8; 1920]).unwrap();
+    /// writer.finalize().unwrap();
+    /// let _ = std::fs::remove_file(temp_path);
+    /// ```
+    pub fn write_raw_pcm_chunk(&mut self, pcm_bytes: &[u8]) -> Result<(), CoreError> {
+        if self.is_finalized {
+            return Err(CoreError::ConfigValidation(
+                "Cannot write to finalized AVI container".to_string(),
+            ));
+        }
+
+        if pcm_bytes.is_empty() {
+            return Ok(());
+        }
+
         let chunk_size = pcm_bytes.len() as u32;
         let pad = (chunk_size % 2) as usize;
         let chunk_total = 8 + (chunk_size as u64) + (pad as u64);
@@ -479,7 +518,7 @@ impl AviWriter {
             .write_all(&chunk_size.to_le_bytes())
             .map_err(|e| CoreError::Serialization(e.to_string()))?;
         self.writer
-            .write_all(&pcm_bytes)
+            .write_all(pcm_bytes)
             .map_err(|e| CoreError::Serialization(e.to_string()))?;
 
         if pad > 0 {

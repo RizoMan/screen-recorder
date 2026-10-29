@@ -4,6 +4,7 @@
 //! strongly-typed view state machines (`enum`s) and media metadata descriptors from rendering logic.
 
 use std::path::PathBuf;
+use rec_core::avi_trimmer::AviClipMetadata;
 use rec_core::i18n::{text, I18nKey, Language};
 use rec_platform_windows::MonitorInfo;
 
@@ -171,6 +172,19 @@ impl RecentRecordingMeta {
             RecentMediaKind::AnimatedGif { ref spec_str } => spec_str.as_str(),
         }
     }
+}
+
+/// Interactive state for the post-recording Quick Trim modal (`[SPEC-FEAT-TRIM-001]`).
+#[derive(Debug, Clone)]
+pub struct QuickTrimModalState {
+    /// Path to the source `.avi` file being trimmed.
+    pub source_path: PathBuf,
+    /// Probed container metadata (`width`, `height`, `fps`, `total_frames`, `duration_secs`).
+    pub meta: AviClipMetadata,
+    /// Selected In Point timestamp in seconds.
+    pub start_sec: f64,
+    /// Selected Out Point timestamp in seconds.
+    pub end_sec: f64,
 }
 
 /// Formats a monitor descriptor into a standardized display string (DRY helper).

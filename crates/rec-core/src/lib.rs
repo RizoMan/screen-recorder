@@ -14,6 +14,7 @@
 #![forbid(unsafe_code)]
 
 pub mod audio;
+pub mod avi_trimmer;
 pub mod avi_writer;
 pub mod config;
 pub mod cursor_effects;
@@ -25,6 +26,7 @@ pub mod pixel_format;
 pub mod ring_buffer;
 
 pub use audio::{AudioFrame, AudioMixer};
+pub use avi_trimmer::{probe_avi_metadata, trim_avi_lossless, AviClipMetadata, TrimRange};
 pub use avi_writer::{encode_frame_to_jpeg, AviWriter};
 pub use config::AppConfig;
 pub use cursor_effects::{
